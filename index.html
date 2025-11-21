@@ -159,7 +159,7 @@ Public Sub 結合セル付き_複数ブック統合_ファイル名付き_全シ
                 ' --- データ行取得 ---
                 ' 「表示名」列の下が空になるまで
                 r = dataStartRow
-                Do While Len(Trim$(wsSrc.Cells(r, dispCol).Text)) > 0
+                Do While Len(Trim$(GetMergedText(wsSrc.Cells(r, dispCol)))) > 0
                     
                     ' データ行は常に3行目以降になる
                     destRow = wsMaster.Cells(wsMaster.Rows.Count, "A").End(xlUp).Row + 1
@@ -174,9 +174,9 @@ Public Sub 結合セル付き_複数ブック統合_ファイル名付き_全シ
                         If key <> "" And key <> "|" Then
                             If headerMap.Exists(key) Then
                                 destCol = headerMap(key)
-                                v = wsSrc.Cells(r, c).Value
+                                v = GetMergedText(wsSrc.Cells(r, c))
                                 
-                                If LenB(CStr(v)) > 0 Then
+                                If Len(Trim$(CStr(v))) > 0 Then
                                     wsMaster.Cells(destRow, destCol).Value = v
                                 End If
                             End If
@@ -204,18 +204,7 @@ EndProc:
     Application.ScreenUpdating = True
 
 End Sub
-
-
-
-
-
-
-
-
-
-
-    
-
+                          
 </code></pre>
 </body>
 </html>
