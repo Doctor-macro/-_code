@@ -159,7 +159,7 @@ Public Sub 結合セル付き_複数ブック統合_ファイル名付き_全シ
                 ' --- データ行取得 ---
                 ' 「表示名」列の下が空になるまで
                 r = dataStartRow
-                Do While Len(Trim$(CStr(wsSrc.Cells(r, dispCol).Value))) > 0
+                Do While Len(Trim$(wsSrc.Cells(r, dispCol).Text)) > 0
                     
                     ' データ行は常に3行目以降になる
                     destRow = wsMaster.Cells(wsMaster.Rows.Count, "A").End(xlUp).Row + 1
