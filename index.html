@@ -5,6 +5,181 @@
     <title>test</title>
   </head>
   <body>
-    GitHub Pages 動作テスト
+    Option Explicit
+    
+    ' 結合セルを含めて、そのセルが属する結合ブロックの左上セルの文字列を返す
+    Private Function GetMergedText(rng As Range) As String
+        Dim tmp As Range
+        If rng.MergeCells Then
+            Set tmp = rng.MergeArea.Cells(1, 1) ' 結合範囲の左上
+            GetMergedText = CStr(tmp.Value)
+        Else
+            GetMergedText = CStr(rng.Value)
+        End If
+    End Function
+    
+    Public Sub 結合セル付き_複数ブック統合_ファイル名付き()
+    
+        Dim wbMaster As Workbook
+        Dim wsMaster As Worksheet
+        Dim folderPath As String
+        Dim fd As FileDialog
+        Dim fileName As String
+        
+        Dim wbSrc As Workbook
+        Dim wsSrc As Worksheet
+        
+        Dim headerMap As Object ' 項目キー → 統合シートの列番号
+        Dim nextCol As Long
+        
+        Dim dispCell As Range
+        Dim header1Row As Long, header2Row As Long
+        Dim dataStartRow As Long
+        Dim lastCol As Long, dispCol As Long
+        
+        Dim c As Long, r As Long
+        Dim key As String
+        Dim h1 As String, h2 As String
+        Dim destCol As Long, destRow As Long
+        Dim v As Variant
+        
+        Dim headerKey() As String
+        
+        Application.ScreenUpdating = False
+        Application.EnableEvents = False
+        
+        Set wbMaster = ThisWorkbook
+        Set wsMaster = wbMaster.Worksheets("統合") ' 統合先シート名
+        
+        ' 統合シート初期化（1〜2行目：ヘッダ用）
+        wsMaster.Cells.Clear
+        
+        ' ★A列は「元ファイル名」に固定する
+        wsMaster.Cells(1, 1).Value = "元ファイル名"
+        wsMaster.Cells(2, 1).Value = ""   ' 2行目は空でもOK
+        
+        ' ★項目ヘッダの開始列はB列から
+        nextCol = 2
+        
+        ' 項目名 → 列番号 のマップ
+        Set headerMap = CreateObject("Scripting.Dictionary")
+        
+        ' --- フォルダ選択ダイアログ ---
+        Set fd = Application.FileDialog(msoFileDialogFolderPicker)
+        With fd
+            .Title = "統合するExcelファイルが入っているフォルダを選んでください"
+            If Not .Show Then
+                MsgBox "キャンセルされました。", vbInformation
+                GoTo EndProc
+            End If
+            folderPath = .SelectedItems(1)
+        End With
+        If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+        
+        ' --- 最初のファイル ---
+        fileName = Dir(folderPath & "*.xls*") ' xlsx, xlsm, xls など
+        
+        Do While fileName <> ""
+            
+            ' 自分自身（統合ブック）はスキップ
+            If fileName <> wbMaster.Name Then
+            
+                Set wbSrc = Workbooks.Open(folderPath & fileName)
+                
+                ' ここでは「一番左のシート」を対象と仮定
+                ' 固定のシート名があるなら Worksheets("～") に変えてください
+                Set wsSrc = wbSrc.Worksheets(1)
+                
+                ' 「表示名」を探す（完全一致）
+                Set dispCell = wsSrc.Cells.Find(What:="表示名", _
+                                                LookIn:=xlValues, _
+                                                LookAt:=xlWhole, _
+                                                SearchOrder:=xlByRows, _
+                                                SearchDirection:=xlNext, _
+                                                MatchCase:=False)
+                If dispCell Is Nothing Then
+                    ' 表示名が見つからないブックはスキップ
+                    wbSrc.Close SaveChanges:=False
+                    GoTo NextFile
+                End If
+                
+                header2Row = dispCell.Row        ' 「表示名」の行
+                header1Row = header2Row - 1      ' 一つ上の行
+                dataStartRow = header2Row + 1    ' データ開始行
+                dispCol = dispCell.Column        ' 「表示名」の列
+                
+                ' データとして見る列の終わりは「表示名」列まで
+                lastCol = dispCol
+                
+                ' --- このシートのヘッダキーを列ごとに作っておく ---
+                ReDim headerKey(1 To lastCol)
+                
+                For c = 1 To lastCol
+                    h1 = Trim(GetMergedText(wsSrc.Cells(header1Row, c)))
+                    h2 = Trim(GetMergedText(wsSrc.Cells(header2Row, c)))
+                    
+                    ' ①行と②行を合わせて項目キーにする
+                    key = h1 & "|" & h2
+                    
+                    headerKey(c) = key
+                    
+                    ' 完全に空（"|"）なら無視
+                    If key <> "|" Then
+                        ' まだ登録されていない項目なら、統合シートに新列を追加
+                        If Not headerMap.Exists(key) Then
+                            headerMap.Add key, nextCol
+                            ' 統合シートの1・2行目にヘッダを書いておく
+                            wsMaster.Cells(1, nextCol).Value = h1
+                            wsMaster.Cells(2, nextCol).Value = h2
+                            nextCol = nextCol + 1
+                        End If
+                    End If
+                Next c
+                
+                ' --- データ行の読み取り ---
+                ' 「表示名」の列の下が空白になるまで
+                r = dataStartRow
+                Do While LenB(CStr(wsSrc.Cells(r, dispCol).Value)) > 0
+                    
+                    ' ★統合シートの次の行を取得（A列基準）
+                    destRow = wsMaster.Cells(wsMaster.Rows.Count, "A").End(xlUp).Row + 1
+                    
+                    ' ★この行がどのファイル由来か、A列に記録
+                    wsMaster.Cells(destRow, 1).Value = wbSrc.Name   ' フルパスが良ければ folderPath & fileName
+                    
+                    ' 列ごとに値を読み、対応する項目列へ書き込み
+                    For c = 1 To lastCol
+                        key = headerKey(c)
+                        If key <> "" And key <> "|" Then
+                            If headerMap.Exists(key) Then
+                                destCol = headerMap(key)
+                                v = wsSrc.Cells(r, c).Value
+                                If Not IsEmpty(v) And LenB(CStr(v)) > 0 Then
+                                    wsMaster.Cells(destRow, destCol).Value = v
+                                End If
+                            End If
+                        End If
+                    Next c
+                    
+                    r = r + 1
+                Loop
+                
+                wbSrc.Close SaveChanges:=False
+            
+            End If
+            
+    NextFile:
+            fileName = Dir() ' 次のファイル
+            
+        Loop
+        
+        MsgBox "統合が完了しました。", vbInformation
+    
+    EndProc:
+        Application.EnableEvents = True
+        Application.ScreenUpdating = True
+        
+    End Sub
+
   </body>
 </html>
