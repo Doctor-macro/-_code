@@ -18,20 +18,7 @@
 <h2>VBA Code</h2>
 
 <pre><code>
-Option Explicit
-
-' 結合セルを含めて、そのセルが属する結合ブロックの左上セルの文字列を返す
-Private Function GetMergedText(rng As Range) As String
-    Dim tmp As Range
-    If rng.MergeCells Then
-        Set tmp = rng.MergeArea.Cells(1, 1) ' 結合範囲の左上
-        GetMergedText = CStr(tmp.Value)
-    Else
-        GetMergedText = CStr(rng.Value)
-    End If
-End Function
-
-Public Sub 結合セル付き_複数ブック統合_ファイル名付き()
+Public Sub 結合セル付き_複数ブック統合_ファイル名付き_全シート()
 
     Dim wbMaster As Workbook
     Dim wsMaster As Worksheet
@@ -64,15 +51,15 @@ Public Sub 結合セル付き_複数ブック統合_ファイル名付き()
     Set wbMaster = ThisWorkbook
     Set wsMaster = wbMaster.Worksheets("統合") ' 統合先シート名
     
-    ' 統合シート初期化（1〜2行目：ヘッダ用）
+    ' 統合シート初期化（1?2行目：ヘッダ用）
     wsMaster.Cells.Clear
     
-    ' ★A列は「元ファイル名」に固定する
+    ' A列は「元ファイル名」に固定
     wsMaster.Cells(1, 1).Value = "元ファイル名"
-    wsMaster.Cells(2, 1).Value = ""   ' 2行目は空でもOK
+    wsMaster.Cells(2, 1).Value = "元シート名"   ' シート名も入れておく
     
-    ' ★項目ヘッダの開始列はB列から
-    nextCol = 2
+    ' 項目ヘッダの開始列はC列から（A:ファイル名, B:シート名）
+    nextCol = 3
     
     ' 項目名 → 列番号 のマップ
     Set headerMap = CreateObject("Scripting.Dictionary")
@@ -99,89 +86,92 @@ Public Sub 結合セル付き_複数ブック統合_ファイル名付き()
         
             Set wbSrc = Workbooks.Open(folderPath & fileName)
             
-            ' ここでは「一番左のシート」を対象と仮定
-            ' 固定のシート名があるなら Worksheets("～") に変えてください
-            Set wsSrc = wbSrc.Worksheets(1)
-            
-            ' 「表示名」を探す（完全一致）
-            Set dispCell = wsSrc.Cells.Find(What:="表示名", _
-                                            LookIn:=xlValues, _
-                                            LookAt:=xlWhole, _
-                                            SearchOrder:=xlByRows, _
-                                            SearchDirection:=xlNext, _
-                                            MatchCase:=False)
-            If dispCell Is Nothing Then
-                ' 表示名が見つからないブックはスキップ
-                wbSrc.Close SaveChanges:=False
-                GoTo NextFile
-            End If
-            
-            header2Row = dispCell.Row        ' 「表示名」の行
-            header1Row = header2Row - 1      ' 一つ上の行
-            dataStartRow = header2Row + 1    ' データ開始行
-            dispCol = dispCell.Column        ' 「表示名」の列
-            
-            ' データとして見る列の終わりは「表示名」列まで
-            lastCol = dispCol
-            
-            ' --- このシートのヘッダキーを列ごとに作っておく ---
-            ReDim headerKey(1 To lastCol)
-            
-            For c = 1 To lastCol
-                h1 = Trim(GetMergedText(wsSrc.Cells(header1Row, c)))
-                h2 = Trim(GetMergedText(wsSrc.Cells(header2Row, c)))
+            ' ▼▼ ここから：このブックの全シートをループ ▼▼
+            For Each wsSrc In wbSrc.Worksheets
                 
-                ' ①行と②行を合わせて項目キーにする
-                key = h1 & "|" & h2
-                
-                headerKey(c) = key
-                
-                ' 完全に空（"|"）なら無視
-                If key <> "|" Then
-                    ' まだ登録されていない項目なら、統合シートに新列を追加
-                    If Not headerMap.Exists(key) Then
-                        headerMap.Add key, nextCol
-                        ' 統合シートの1・2行目にヘッダを書いておく
-                        wsMaster.Cells(1, nextCol).Value = h1
-                        wsMaster.Cells(2, nextCol).Value = h2
-                        nextCol = nextCol + 1
-                    End If
+                ' 「表示名」を探す（完全一致）
+                Set dispCell = Nothing
+                Set dispCell = wsSrc.Cells.Find(What:="表示名", _
+                                                LookIn:=xlValues, _
+                                                LookAt:=xlWhole, _
+                                                SearchOrder:=xlByRows, _
+                                                SearchDirection:=xlNext, _
+                                                MatchCase:=False)
+                If dispCell Is Nothing Then
+                    ' このシートには「表示名」がないのでスキップ
+                    GoTo NextSheet
                 End If
-            Next c
-            
-            ' --- データ行の読み取り ---
-            ' 「表示名」の列の下が空白になるまで
-            r = dataStartRow
-            Do While LenB(CStr(wsSrc.Cells(r, dispCol).Value)) > 0
                 
-                ' ★統合シートの次の行を取得（A列基準）
-                destRow = wsMaster.Cells(wsMaster.Rows.Count, "A").End(xlUp).Row + 1
+                header2Row = dispCell.Row        ' 「表示名」の行
+                header1Row = header2Row - 1      ' 一つ上の行
+                dataStartRow = header2Row + 1    ' データ開始行
+                dispCol = dispCell.Column        ' 「表示名」の列
                 
-                ' ★この行がどのファイル由来か、A列に記録
-                wsMaster.Cells(destRow, 1).Value = wbSrc.Name   ' フルパスが良ければ folderPath & fileName
+                ' データとして見る列の終わりは「表示名」列まで
+                lastCol = dispCol
                 
-                ' 列ごとに値を読み、対応する項目列へ書き込み
+                ' --- このシートのヘッダキーを列ごとに作っておく ---
+                ReDim headerKey(1 To lastCol)
+                
                 For c = 1 To lastCol
-                    key = headerKey(c)
-                    If key <> "" And key <> "|" Then
-                        If headerMap.Exists(key) Then
-                            destCol = headerMap(key)
-                            v = wsSrc.Cells(r, c).Value
-                            If Not IsEmpty(v) And LenB(CStr(v)) > 0 Then
-                                wsMaster.Cells(destRow, destCol).Value = v
-                            End If
+                    h1 = Trim(GetMergedText(wsSrc.Cells(header1Row, c)))
+                    h2 = Trim(GetMergedText(wsSrc.Cells(header2Row, c)))
+                    
+                    ' ①行と②行を合わせて項目キーにする
+                    key = h1 & "|" & h2
+                    
+                    headerKey(c) = key
+                    
+                    ' 完全に空（"|"）なら無視
+                    If key <> "|" Then
+                        ' まだ登録されていない項目なら、統合シートに新列を追加
+                        If Not headerMap.Exists(key) Then
+                            headerMap.Add key, nextCol
+                            ' 統合シートの1・2行目にヘッダを書いておく
+                            wsMaster.Cells(1, nextCol).Value = h1
+                            wsMaster.Cells(2, nextCol).Value = h2
+                            nextCol = nextCol + 1
                         End If
                     End If
                 Next c
                 
-                r = r + 1
-            Loop
+                ' --- データ行の読み取り ---
+                ' 「表示名」の列の下が空白になるまで
+                r = dataStartRow
+                Do While LenB(CStr(wsSrc.Cells(r, dispCol).Value)) > 0
+                    
+                    ' 統合シートの次の行を取得（A列基準）
+                    destRow = wsMaster.Cells(wsMaster.Rows.Count, "A").End(xlUp).Row + 1
+                    
+                    ' この行がどのファイル・シート由来か記録
+                    wsMaster.Cells(destRow, 1).Value = wbSrc.Name   ' 元ファイル名
+                    wsMaster.Cells(destRow, 2).Value = wsSrc.Name   ' 元シート名
+                    
+                    ' 列ごとに値を読み、対応する項目列へ書き込み
+                    For c = 1 To lastCol
+                        key = headerKey(c)
+                        If key <> "" And key <> "|" Then
+                            If headerMap.Exists(key) Then
+                                destCol = headerMap(key)
+                                v = wsSrc.Cells(r, c).Value
+                                If Not IsEmpty(v) And LenB(CStr(v)) > 0 Then
+                                    wsMaster.Cells(destRow, destCol).Value = v
+                                End If
+                            End If
+                        End If
+                    Next c
+                    
+                    r = r + 1
+                Loop
+                
+NextSheet:
+            Next wsSrc
+            ' ▲▲ ここまで：全シート走査 ▲▲
             
             wbSrc.Close SaveChanges:=False
         
         End If
         
-NextFile:
         fileName = Dir() ' 次のファイル
         
     Loop
@@ -193,6 +183,7 @@ EndProc:
     Application.ScreenUpdating = True
     
 End Sub
+
 </code></pre>
 
 </body>
