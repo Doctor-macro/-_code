@@ -26,10 +26,12 @@
 Option Explicit
 
 ' グローバル変数（再帰用）
-Private gPaths As Collection      ' 各行になる「パス（階層）」の集合
-Private gMaxDepth As Long         ' 最大階層数
+Dim gPaths As Collection      ' 各行になる「パス（階層）」の集合
+Dim gMaxDepth As Long         ' 最大階層数
 
+' =========================
 ' メインマクロ
+' =========================
 Public Sub 展開レシピ階層を作成()
 
     Dim wsB As Worksheet, wsC As Worksheet, wsD As Worksheet, wsE As Worksheet
@@ -40,11 +42,13 @@ Public Sub 展開レシピ階層を作成()
     Dim key As Variant
     Dim path() As String
     
-    ' --- シートの取得（シート名は必要に応じて修正してください） ---
-    Set wsB = ThisWorkbook.Worksheets("B")
-    Set wsC = ThisWorkbook.Worksheets("C")
-    Set wsD = ThisWorkbook.Worksheets("D")
-    Set wsE = ThisWorkbook.Worksheets("E")
+    ' --- ★ここをあなたのシートタブ名に合わせて変更してください ---
+    ' 例：Sheet1(レシピ) なら "レシピ"、Sheet2(仕込品) なら "仕込品" など
+    Set wsB = ThisWorkbook.Worksheets("B")   ' レシピのシート名
+    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品のシート名
+    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材のシート名
+    Set wsE = ThisWorkbook.Worksheets("E")   ' 結果を書き出すシート名
+    ' ---------------------------------------------------------
     
     ' --- 辞書の用意 ---
     Set dictRecipeChildren = CreateObject("Scripting.Dictionary")
@@ -98,8 +102,10 @@ Public Sub 展開レシピ階層を作成()
 
 End Sub
 
-' 親 -> 子リスト を Dictionary に追加する汎用サブルーチン
-Private Sub AddChildToDict(ByVal dict As Object, ByVal parent As String, ByVal child As String)
+' =========================
+' ヘルパー：親 -> 子リストを辞書に追加
+' =========================
+Public Sub AddChildToDict(ByVal dict As Object, ByVal parent As String, ByVal child As String)
     Dim col As Collection
     If Not dict.Exists(parent) Then
         Set col = New Collection
@@ -111,17 +117,19 @@ Private Sub AddChildToDict(ByVal dict As Object, ByVal parent As String, ByVal c
     End If
 End Sub
 
-' レシピor仕込品の下を再帰的に展開する
-Private Sub ExpandFromItem(ByVal currentPath() As String, _
-                           ByVal dictRecipeChildren As Object, _
-                           ByVal dictShikomiChildren As Object, _
-                           ByVal parentName As String, _
-                           Optional ByVal depth As Long = 0)
+' =========================
+' 再帰展開：レシピ or 仕込品から下を辿る
+' =========================
+Public Sub ExpandFromItem(ByVal currentPath() As String, _
+                          ByVal dictRecipeChildren As Object, _
+                          ByVal dictShikomiChildren As Object, _
+                          ByVal parentName As String, _
+                          Optional ByVal depth As Long = 0)
     Dim children As Collection
     Dim child As Variant
     Dim newPath() As String
     Dim i As Long
-    Const MAX_DEPTH As Long = 20 ' 無限ループ防止のため上限
+    Const MAX_DEPTH As Long = 20 ' 無限ループ防止
     
     If depth > MAX_DEPTH Then Exit Sub
     
@@ -134,7 +142,7 @@ Private Sub ExpandFromItem(ByVal currentPath() As String, _
         Set children = dictShikomiChildren(parentName)
     Else
         ' 子がいない＝葉とみなす
-        Call SavePath currentPath
+        Call SavePath(currentPath)
         Exit Sub
     End If
     
@@ -156,16 +164,20 @@ Private Sub ExpandFromItem(ByVal currentPath() As String, _
     Next child
 End Sub
 
-' パスを結果リストに追加し、最大深さを更新
-Private Sub SavePath(ByVal path() As String)
+' =========================
+' パスを結果リストに追加
+' =========================
+Public Sub SavePath(ByVal path() As String)
     gPaths.Add path
     If UBound(path) + 1 > gMaxDepth Then
         gMaxDepth = UBound(path) + 1
     End If
 End Sub
 
-' 結果をEシートに書き出す
-Private Sub WriteResultToSheet(ByVal ws As Worksheet, ByVal dictFukuInfo As Object)
+' =========================
+' 結果をEシートに書き込む
+' =========================
+Public Sub WriteResultToSheet(ByVal ws As Worksheet, ByVal dictFukuInfo As Object)
     Dim r As Long, i As Long
     Dim path() As String
     Dim L As Long, offset As Long, col As Long
@@ -174,7 +186,7 @@ Private Sub WriteResultToSheet(ByVal ws As Worksheet, ByVal dictFukuInfo As Obje
     Dim qty As Double, price As Double
     Dim unitPrice As Variant, unitStr As String
     
-    ' いったんEシートをクリア
+    ' いったんEシートをクリア（★Eだけ）
     ws.Cells.Clear
     
     ' ヘッダー行
