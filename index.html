@@ -23,187 +23,209 @@
 
 
 
+Option Explicit
+
+' グローバル変数（再帰用）
+Private gPaths As Collection      ' 各行になる「パス（階層）」の集合
+Private gMaxDepth As Long         ' 最大階層数
+
+' メインマクロ
+Public Sub 展開レシピ階層を作成()
+
+    Dim wsB As Worksheet, wsC As Worksheet, wsD As Worksheet, wsE As Worksheet
+    Dim dictRecipeChildren As Object ' レシピ -> 直下の仕込品/副食材（Bシート）
+    Dim dictShikomiChildren As Object ' 仕込品 -> 下の仕込品/副食材（Cシート）
+    Dim dictFukuInfo As Object ' 副食材 -> (分量, 単位, 価格)（Dシート）
+    Dim lastRow As Long, i As Long
+    Dim key As Variant
+    Dim path() As String
+    
+    ' --- シートの取得（シート名は必要に応じて修正してください） ---
+    Set wsB = ThisWorkbook.Worksheets("B")
+    Set wsC = ThisWorkbook.Worksheets("C")
+    Set wsD = ThisWorkbook.Worksheets("D")
+    Set wsE = ThisWorkbook.Worksheets("E")
+    
+    ' --- 辞書の用意 ---
+    Set dictRecipeChildren = CreateObject("Scripting.Dictionary")
+    Set dictShikomiChildren = CreateObject("Scripting.Dictionary")
+    Set dictFukuInfo = CreateObject("Scripting.Dictionary")
+    
+    ' --- Bシート：レシピ -> 直下の仕込品/副食材 を読み込み ---
+    lastRow = wsB.Cells(wsB.Rows.Count, "A").End(xlUp).Row
+    For i = 2 To lastRow   ' 1行目をヘッダ想定
+        If wsB.Cells(i, "A").Value <> "" And wsB.Cells(i, "B").Value <> "" Then
+            Call AddChildToDict(dictRecipeChildren, _
+                                CStr(wsB.Cells(i, "A").Value), _
+                                CStr(wsB.Cells(i, "B").Value))
+        End If
+    Next i
+    
+    ' --- Cシート：仕込品 -> その下の仕込品/副食材 を読み込み ---
+    lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
+    For i = 2 To lastRow
+        If wsC.Cells(i, "A").Value <> "" And wsC.Cells(i, "E").Value <> "" Then
+            Call AddChildToDict(dictShikomiChildren, _
+                                CStr(wsC.Cells(i, "A").Value), _
+                                CStr(wsC.Cells(i, "E").Value))
+        End If
+    Next i
+    
+    ' --- Dシート：副食材 -> (分量, 単位, 価格) ---
+    lastRow = wsD.Cells(wsD.Rows.Count, "A").End(xlUp).Row
+    For i = 2 To lastRow
+        If wsD.Cells(i, "A").Value <> "" Then
+            dictFukuInfo(CStr(wsD.Cells(i, "A").Value)) = _
+                Array(wsD.Cells(i, "B").Value, wsD.Cells(i, "C").Value, wsD.Cells(i, "I").Value)
+        End If
+    Next i
+    
+    ' --- 再帰用パスの初期化 ---
+    Set gPaths = New Collection
+    gMaxDepth = 0
+    
+    ' --- 全レシピを起点に再帰展開 ---
+    For Each key In dictRecipeChildren.Keys
+        ReDim path(0 To 0)
+        path(0) = CStr(key) ' レシピ名をパスの先頭に
+        Call ExpandFromItem(path, dictRecipeChildren, dictShikomiChildren, CStr(key))
+    Next key
+    
+    ' --- Eシートをクリアして結果を書き込み ---
+    Call WriteResultToSheet(wsE, dictFukuInfo)
+    
+    MsgBox "Eシートに展開結果を作成しました。", vbInformation
+
+End Sub
+
+' 親 -> 子リスト を Dictionary に追加する汎用サブルーチン
+Private Sub AddChildToDict(ByVal dict As Object, ByVal parent As String, ByVal child As String)
+    Dim col As Collection
+    If Not dict.Exists(parent) Then
+        Set col = New Collection
+        col.Add child
+        dict.Add parent, col
+    Else
+        Set col = dict(parent)
+        col.Add child
+    End If
+End Sub
+
+' レシピor仕込品の下を再帰的に展開する
+Private Sub ExpandFromItem(ByVal currentPath() As String, _
+                           ByVal dictRecipeChildren As Object, _
+                           ByVal dictShikomiChildren As Object, _
+                           ByVal parentName As String, _
+                           Optional ByVal depth As Long = 0)
+    Dim children As Collection
+    Dim child As Variant
+    Dim newPath() As String
+    Dim i As Long
+    Const MAX_DEPTH As Long = 20 ' 無限ループ防止のため上限
+    
+    If depth > MAX_DEPTH Then Exit Sub
+    
+    ' parentName がレシピで、直下の材料が Bシート側にある場合
+    If dictRecipeChildren.Exists(parentName) And depth = 0 Then
+        Set children = dictRecipeChildren(parentName)
+    
+    ' parentName が仕込品で、その下が Cシート側にある場合
+    ElseIf dictShikomiChildren.Exists(parentName) Then
+        Set children = dictShikomiChildren(parentName)
+    Else
+        ' 子がいない＝葉とみなす
+        Call SavePath currentPath
+        Exit Sub
+    End If
+    
+    ' 各子について再帰
+    For Each child In children
+        ' 新しいパスを currentPath + child で作る
+        ReDim newPath(0 To UBound(currentPath) + 1)
+        For i = 0 To UBound(currentPath)
+            newPath(i) = currentPath(i)
+        Next i
+        newPath(UBound(newPath)) = CStr(child)
+        
+        ' 子が【副】なら葉として終了、それ以外ならさらに潜る
+        If Left$(CStr(child), 3) = "【副】" Then
+            Call SavePath(newPath)
+        Else
+            Call ExpandFromItem(newPath, dictRecipeChildren, dictShikomiChildren, CStr(child), depth + 1)
+        End If
+    Next child
+End Sub
+
+' パスを結果リストに追加し、最大深さを更新
+Private Sub SavePath(ByVal path() As String)
+    gPaths.Add path
+    If UBound(path) + 1 > gMaxDepth Then
+        gMaxDepth = UBound(path) + 1
+    End If
+End Sub
+
+' 結果をEシートに書き出す
+Private Sub WriteResultToSheet(ByVal ws As Worksheet, ByVal dictFukuInfo As Object)
+    Dim r As Long, i As Long
+    Dim path() As String
+    Dim L As Long, offset As Long, col As Long
+    Dim leafName As String
+    Dim info As Variant
+    Dim qty As Double, price As Double
+    Dim unitPrice As Variant, unitStr As String
+    
+    ' いったんEシートをクリア
+    ws.Cells.Clear
+    
+    ' ヘッダー行
+    For i = 1 To gMaxDepth
+        ws.Cells(1, i).Value = "階層" & i
+    Next i
+    ws.Cells(1, gMaxDepth + 1).Value = "副食材単価"
+    ws.Cells(1, gMaxDepth + 2).Value = "副食材単位"
+    
+    ' データ行
+    r = 2
+    For Each path In gPaths
+        L = UBound(path) + 1
+        ' 右に寄せて葉（副食材）が gMaxDepth 列目に来るようにオフセット
+        offset = gMaxDepth - L
+        
+        ' 階層部分の書き込み
+        For i = 0 To L - 1
+            col = i + 1 + offset
+            ws.Cells(r, col).Value = path(i)
+        Next i
+        
+        ' 葉（最後の要素）は副食材想定
+        leafName = path(UBound(path))
+        
+        ' 副食材単価・単位の取得
+        unitPrice = ""
+        unitStr = ""
+        If dictFukuInfo.Exists(leafName) Then
+            info = dictFukuInfo(leafName)
+            qty = info(0)
+            unitStr = CStr(info(1))
+            price = info(2)
+            If qty <> 0 Then
+                unitPrice = price / qty
+            End If
+        End If
+        
+        ws.Cells(r, gMaxDepth + 1).Value = unitPrice
+        ws.Cells(r, gMaxDepth + 2).Value = unitStr
+        
+        r = r + 1
+    Next path
+    
+    ' 見やすさ用に列幅自動調整
+    ws.Columns.AutoFit
+End Sub
 
 
   
 
-Option Explicit
-
-' 結合セルから文字列を取得する関数
-Private Function GetMergedText(rng As Range) As String
-    Dim tmp As Range
-    If rng.MergeCells Then
-        Set tmp = rng.MergeArea.Cells(1, 1) ' 結合範囲の左上セル
-        GetMergedText = CStr(tmp.Value)
-    Else
-        GetMergedText = CStr(rng.Value)
-    End If
-End Function
-
-
-Public Sub 結合セル付き_複数ブック統合_ファイル名付き_全シート()
-
-    Dim wbMaster As Workbook
-    Dim wsMaster As Worksheet
-    Dim folderPath As String
-    Dim fd As FileDialog
-    Dim fileName As String
-    
-    Dim wbSrc As Workbook
-    Dim wsSrc As Worksheet
-    
-    Dim headerMap As Object ' 項目キー → 統合シート列番号
-    Dim nextCol As Long
-    
-    Dim dispCell As Range
-    Dim header1Row As Long, header2Row As Long
-    Dim dataStartRow As Long
-    Dim lastCol As Long, dispCol As Long
-    
-    Dim c As Long, r As Long
-    Dim key As String
-    Dim h1 As String, h2 As String
-    Dim destCol As Long, destRow As Long
-    Dim v As Variant
-    
-    Dim headerKey() As String
-    
-    
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    
-    Set wbMaster = ThisWorkbook
-    Set wsMaster = wbMaster.Worksheets("統合")
-    
-    ' --- 統合先初期化 ---
-    wsMaster.Cells.Clear
-    
-    ' A,B列も「1行目・2行目」構造に合わせる
-    ' 1行目：空（またはグループ名を入れてもOK）
-    wsMaster.Cells(1, 1).Value = ""
-    wsMaster.Cells(1, 2).Value = ""
-    
-    ' 2行目：実際の項目名
-    wsMaster.Cells(2, 1).Value = "元ファイル名"
-    wsMaster.Cells(2, 2).Value = "元シート名"
-    
-    ' 項目ヘッダは C列から
-    nextCol = 3
-    
-    Set headerMap = CreateObject("Scripting.Dictionary")
-    
-    ' --- フォルダ選択 ---
-    Set fd = Application.FileDialog(msoFileDialogFolderPicker)
-    With fd
-        .Title = "統合するExcelファイルが入ったフォルダを選択"
-        If Not .Show Then
-            MsgBox "キャンセルされました。"
-            GoTo EndProc
-        End If
-        folderPath = .SelectedItems(1)
-    End With
-    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
-    
-    ' --- ファイルループ ---
-    fileName = Dir(folderPath & "*.xls*")
-    
-    Do While fileName <> ""
-        
-        If fileName <> wbMaster.Name Then
-        
-            Set wbSrc = Workbooks.Open(folderPath & fileName)
-            
-            ' --- 全シートループ ---
-            For Each wsSrc In wbSrc.Worksheets
-                
-                ' 「表示名」を探す
-                Set dispCell = wsSrc.Cells.Find(What:="表示名", _
-                                                LookIn:=xlValues, _
-                                                LookAt:=xlWhole, _
-                                                SearchOrder:=xlByRows, _
-                                                SearchDirection:=xlNext, _
-                                                MatchCase:=False)
-                If dispCell Is Nothing Then
-                    GoTo NextSheet
-                End If
-                
-                header2Row = dispCell.Row          ' 「表示名」の行
-                header1Row = header2Row - 1        ' その一つ上の行
-                dataStartRow = header2Row + 1      ' データ開始行
-                dispCol = dispCell.Column          ' 「表示名」の列
-                lastCol = dispCol                  ' データ列の終端は「表示名」列まで
-                
-                ' --- ヘッダキー作成 ---
-                ReDim headerKey(1 To lastCol)
-                
-                For c = 1 To lastCol
-                    h1 = Trim(GetMergedText(wsSrc.Cells(header1Row, c)))
-                    h2 = Trim(GetMergedText(wsSrc.Cells(header2Row, c)))
-                    
-                    ' ①行 | ②行 をキーにする
-                    key = h1 & "|" & h2
-                    headerKey(c) = key
-                    
-                    ' 完全に空（"|"）なら無視
-                    If key <> "|" Then
-                        If Not headerMap.Exists(key) Then
-                            headerMap.Add key, nextCol
-                            ' 1行目＝①行の値, 2行目＝②行の値
-                            wsMaster.Cells(1, nextCol).Value = h1
-                            wsMaster.Cells(2, nextCol).Value = h2
-                            nextCol = nextCol + 1
-                        End If
-                    End If
-                Next c
-                
-                ' --- データ行取得 ---
-                ' 「表示名」列の下が空になるまで
-                r = dataStartRow
-                Do While Len(Trim$(GetMergedText(wsSrc.Cells(r, dispCol)))) > 0
-                    
-                    ' データ行は常に3行目以降になる
-                    destRow = wsMaster.Cells(wsMaster.Rows.Count, "A").End(xlUp).Row + 1
-                    
-                    ' A,B列：どのファイル・シート由来か
-                    wsMaster.Cells(destRow, 1).Value = wbSrc.Name
-                    wsMaster.Cells(destRow, 2).Value = wsSrc.Name
-                    
-                    ' C列以降：項目ごとの値
-                    For c = 1 To lastCol
-                        key = headerKey(c)
-                        If key <> "" And key <> "|" Then
-                            If headerMap.Exists(key) Then
-                                destCol = headerMap(key)
-                                v = GetMergedText(wsSrc.Cells(r, c))
-                                
-                                If Len(Trim$(CStr(v))) > 0 Then
-                                    wsMaster.Cells(destRow, destCol).Value = v
-                                End If
-                            End If
-                        End If
-                    Next c
-                    
-                    r = r + 1
-                Loop
-                
-NextSheet:
-            Next wsSrc
-            
-            wbSrc.Close SaveChanges:=False
-        
-        End If
-        
-        fileName = Dir()
-    Loop
-    
-    MsgBox "統合が完了しました。", vbInformation
-
-
-EndProc:
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-
-End Sub
                           
 </code></pre>
 </body>
