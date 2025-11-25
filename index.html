@@ -22,16 +22,8 @@
 
 
 
-
 Option Explicit
 
-' グローバル変数（再帰用）
-Dim gPaths As Collection      ' 各行になる「パス（階層）」の集合
-Dim gMaxDepth As Long         ' 最大階層数
-
-' =========================
-' メインマクロ
-' =========================
 Public Sub 展開レシピ階層を作成()
 
     Dim wsB As Worksheet, wsC As Worksheet, wsD As Worksheet, wsE As Worksheet
@@ -39,43 +31,42 @@ Public Sub 展開レシピ階層を作成()
     Dim dictShikomiChildren As Object ' 仕込品 -> 下の仕込品/副食材（Cシート）
     Dim dictFukuInfo As Object ' 副食材 -> (分量, 単位, 価格)（Dシート）
     Dim lastRow As Long, i As Long
-    Dim key As Variant
-    Dim path() As String
     
-    ' --- ★ここをあなたのシートタブ名に合わせて変更してください ---
-    ' 例：Sheet1(レシピ) なら "レシピ"、Sheet2(仕込品) なら "仕込品" など
-    Set wsB = ThisWorkbook.Worksheets("B")   ' レシピのシート名
-    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品のシート名
-    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材のシート名
-    Set wsE = ThisWorkbook.Worksheets("E")   ' 結果を書き出すシート名
-    ' ---------------------------------------------------------
+    Dim key As Variant
+    Dim allPaths As Collection
+    Dim maxDepth As Long
+    
+    Set wsB = ThisWorkbook.Worksheets("B")   ' レシピ（元Bシート）
+    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品（元Cシート）
+    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材（元Dシート）
+    Set wsE = ThisWorkbook.Worksheets("E")   ' 展開結果を書きたいシート
     
     ' --- 辞書の用意 ---
     Set dictRecipeChildren = CreateObject("Scripting.Dictionary")
     Set dictShikomiChildren = CreateObject("Scripting.Dictionary")
     Set dictFukuInfo = CreateObject("Scripting.Dictionary")
     
-    ' --- Bシート：レシピ -> 直下の仕込品/副食材 を読み込み ---
+    ' --- Bシート：レシピ -> 直下の仕込品/副食材 ---
     lastRow = wsB.Cells(wsB.Rows.Count, "A").End(xlUp).Row
-    For i = 2 To lastRow   ' 1行目をヘッダ想定
+    For i = 2 To lastRow   ' 1行目ヘッダ想定
         If wsB.Cells(i, "A").Value <> "" And wsB.Cells(i, "B").Value <> "" Then
-            Call AddChildToDict(dictRecipeChildren, _
-                                CStr(wsB.Cells(i, "A").Value), _
-                                CStr(wsB.Cells(i, "B").Value))
+            Call AddChild(dictRecipeChildren, _
+                          CStr(wsB.Cells(i, "A").Value), _
+                          CStr(wsB.Cells(i, "B").Value))
         End If
     Next i
     
-    ' --- Cシート：仕込品 -> その下の仕込品/副食材 を読み込み ---
+    ' --- Cシート：仕込品 -> その下の仕込品/副食材 ---
     lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
     For i = 2 To lastRow
         If wsC.Cells(i, "A").Value <> "" And wsC.Cells(i, "E").Value <> "" Then
-            Call AddChildToDict(dictShikomiChildren, _
-                                CStr(wsC.Cells(i, "A").Value), _
-                                CStr(wsC.Cells(i, "E").Value))
+            Call AddChild(dictShikomiChildren, _
+                          CStr(wsC.Cells(i, "A").Value), _
+                          CStr(wsC.Cells(i, "E").Value))
         End If
     Next i
     
-    ' --- Dシート：副食材 -> (分量, 単位, 価格) ---
+    ' --- Dシート：副食材 -> (規格量, 単位, 価格) ---
     lastRow = wsD.Cells(wsD.Rows.Count, "A").End(xlUp).Row
     For i = 2 To lastRow
         If wsD.Cells(i, "A").Value <> "" Then
@@ -84,28 +75,142 @@ Public Sub 展開レシピ階層を作成()
         End If
     Next i
     
-    ' --- 再帰用パスの初期化 ---
-    Set gPaths = New Collection
-    gMaxDepth = 0
+    ' --- すべてのパス（レシピ → … → 副食材）を作る ---
+    Set allPaths = New Collection
+    maxDepth = 0
     
-    ' --- 全レシピを起点に再帰展開 ---
+    Dim stack As Collection
+    Dim item As Variant
+    Dim curPath() As String
+    Dim newPath() As String
+    Dim parentName As String
+    Dim depth As Long
+    Dim children As Collection
+    Dim child As Variant
+    Dim j As Long, L As Long
+    
+    Set stack = New Collection
+    
+    ' レシピを初期ノードとしてスタックに積む
     For Each key In dictRecipeChildren.Keys
-        ReDim path(0 To 0)
-        path(0) = CStr(key) ' レシピ名をパスの先頭に
-        Call ExpandFromItem(path, dictRecipeChildren, dictShikomiChildren, CStr(key))
+        ReDim curPath(0 To 0)
+        curPath(0) = CStr(key)
+        item = Array(curPath, CStr(key), 0) ' path, parentName, depth
+        stack.Add item
     Next key
     
-    ' --- Eシートをクリアして結果を書き込み ---
-    Call WriteResultToSheet(wsE, dictFukuInfo)
+    ' スタックを使って木をたどる（再帰なし）
+    Do While stack.Count > 0
+        
+        item = stack(stack.Count)
+        stack.Remove stack.Count
+        
+        curPath = item(0)
+        parentName = CStr(item(1))
+        depth = CLng(item(2))
+        
+        Set children = Nothing
+        
+        ' depth=0 のときだけ「レシピ -> Bシートの子」を見る
+        If dictRecipeChildren.Exists(parentName) And depth = 0 Then
+            Set children = dictRecipeChildren(parentName)
+        ' それ以外は「仕込品 -> Cシートの子」
+        ElseIf dictShikomiChildren.Exists(parentName) Then
+            Set children = dictShikomiChildren(parentName)
+        End If
+        
+        ' 子がいない場合＝葉
+        If children Is Nothing Then
+            allPaths.Add curPath
+            L = UBound(curPath) + 1
+            If L > maxDepth Then maxDepth = L
+        Else
+            ' 子がいる場合、それぞれについて処理
+            For Each child In children
+                ReDim newPath(0 To UBound(curPath) + 1)
+                For j = 0 To UBound(curPath)
+                    newPath(j) = curPath(j)
+                Next j
+                newPath(UBound(newPath)) = CStr(child)
+                
+                ' 【副】なら葉として保存
+                If Left$(CStr(child), 3) = "【副】" Then
+                    allPaths.Add newPath
+                    L = UBound(newPath) + 1
+                    If L > maxDepth Then maxDepth = L
+                Else
+                    ' さらに下に潜る仕込品なのでスタックに積む
+                    item = Array(newPath, CStr(child), depth + 1)
+                    stack.Add item
+                End If
+            Next child
+        End If
+        
+    Loop
+    
+    ' --- Eシートに書き出し ---
+    Dim ws As Worksheet
+    Set ws = wsE
+    
+    ws.Cells.Clear ' ★Eシートだけクリア
+    
+    ' ヘッダ
+    For i = 1 To maxDepth
+        ws.Cells(1, i).Value = "階層" & i
+    Next i
+    ws.Cells(1, maxDepth + 1).Value = "副食材単価"
+    ws.Cells(1, maxDepth + 2).Value = "副食材単位"
+    
+    ' データ本体
+    Dim r As Long
+    Dim p As Variant
+    Dim offset As Long, col As Long
+    Dim leafName As String
+    Dim info As Variant
+    Dim qty As Double, price As Double
+    Dim unitPrice As Variant, unitStr As String
+    
+    r = 2
+    For Each p In allPaths
+        curPath = p
+        L = UBound(curPath) + 1
+        offset = maxDepth - L
+        
+        ' 階層部分（右寄せ）
+        For i = 0 To L - 1
+            col = i + 1 + offset
+            ws.Cells(r, col).Value = curPath(i)
+        Next i
+        
+        ' 一番右は副食材
+        leafName = curPath(UBound(curPath))
+        
+        unitPrice = ""
+        unitStr = ""
+        If dictFukuInfo.Exists(leafName) Then
+            info = dictFukuInfo(leafName)
+            qty = info(0)
+            unitStr = CStr(info(1))
+            price = info(2)
+            If qty <> 0 Then
+                unitPrice = price / qty  ' 規格価格 ÷ 規格量
+            End If
+        End If
+        
+        ws.Cells(r, maxDepth + 1).Value = unitPrice
+        ws.Cells(r, maxDepth + 2).Value = unitStr
+        
+        r = r + 1
+    Next p
+    
+    ws.Columns.AutoFit
     
     MsgBox "Eシートに展開結果を作成しました。", vbInformation
 
 End Sub
 
-' =========================
-' ヘルパー：親 -> 子リストを辞書に追加
-' =========================
-Public Sub AddChildToDict(ByVal dict As Object, ByVal parent As String, ByVal child As String)
+' 親→子リストを Dictionary に登録するだけの小さいSub
+Private Sub AddChild(ByVal dict As Object, ByVal parent As String, ByVal child As String)
     Dim col As Collection
     If Not dict.Exists(parent) Then
         Set col = New Collection
@@ -115,124 +220,6 @@ Public Sub AddChildToDict(ByVal dict As Object, ByVal parent As String, ByVal ch
         Set col = dict(parent)
         col.Add child
     End If
-End Sub
-
-' =========================
-' 再帰展開：レシピ or 仕込品から下を辿る
-' =========================
-Public Sub ExpandFromItem(ByVal currentPath() As String, _
-                          ByVal dictRecipeChildren As Object, _
-                          ByVal dictShikomiChildren As Object, _
-                          ByVal parentName As String, _
-                          Optional ByVal depth As Long = 0)
-    Dim children As Collection
-    Dim child As Variant
-    Dim newPath() As String
-    Dim i As Long
-    Const MAX_DEPTH As Long = 20 ' 無限ループ防止
-    
-    If depth > MAX_DEPTH Then Exit Sub
-    
-    ' parentName がレシピで、直下の材料が Bシート側にある場合
-    If dictRecipeChildren.Exists(parentName) And depth = 0 Then
-        Set children = dictRecipeChildren(parentName)
-    
-    ' parentName が仕込品で、その下が Cシート側にある場合
-    ElseIf dictShikomiChildren.Exists(parentName) Then
-        Set children = dictShikomiChildren(parentName)
-    Else
-        ' 子がいない＝葉とみなす
-        Call SavePath(currentPath)
-        Exit Sub
-    End If
-    
-    ' 各子について再帰
-    For Each child In children
-        ' 新しいパスを currentPath + child で作る
-        ReDim newPath(0 To UBound(currentPath) + 1)
-        For i = 0 To UBound(currentPath)
-            newPath(i) = currentPath(i)
-        Next i
-        newPath(UBound(newPath)) = CStr(child)
-        
-        ' 子が【副】なら葉として終了、それ以外ならさらに潜る
-        If Left$(CStr(child), 3) = "【副】" Then
-            Call SavePath(newPath)
-        Else
-            Call ExpandFromItem(newPath, dictRecipeChildren, dictShikomiChildren, CStr(child), depth + 1)
-        End If
-    Next child
-End Sub
-
-' =========================
-' パスを結果リストに追加
-' =========================
-Public Sub SavePath(ByVal path() As String)
-    gPaths.Add path
-    If UBound(path) + 1 > gMaxDepth Then
-        gMaxDepth = UBound(path) + 1
-    End If
-End Sub
-
-' =========================
-' 結果をEシートに書き込む
-' =========================
-Public Sub WriteResultToSheet(ByVal ws As Worksheet, ByVal dictFukuInfo As Object)
-    Dim r As Long, i As Long
-    Dim path() As String
-    Dim L As Long, offset As Long, col As Long
-    Dim leafName As String
-    Dim info As Variant
-    Dim qty As Double, price As Double
-    Dim unitPrice As Variant, unitStr As String
-    
-    ' いったんEシートをクリア（★Eだけ）
-    ws.Cells.Clear
-    
-    ' ヘッダー行
-    For i = 1 To gMaxDepth
-        ws.Cells(1, i).Value = "階層" & i
-    Next i
-    ws.Cells(1, gMaxDepth + 1).Value = "副食材単価"
-    ws.Cells(1, gMaxDepth + 2).Value = "副食材単位"
-    
-    ' データ行
-    r = 2
-    For Each path In gPaths
-        L = UBound(path) + 1
-        ' 右に寄せて葉（副食材）が gMaxDepth 列目に来るようにオフセット
-        offset = gMaxDepth - L
-        
-        ' 階層部分の書き込み
-        For i = 0 To L - 1
-            col = i + 1 + offset
-            ws.Cells(r, col).Value = path(i)
-        Next i
-        
-        ' 葉（最後の要素）は副食材想定
-        leafName = path(UBound(path))
-        
-        ' 副食材単価・単位の取得
-        unitPrice = ""
-        unitStr = ""
-        If dictFukuInfo.Exists(leafName) Then
-            info = dictFukuInfo(leafName)
-            qty = info(0)
-            unitStr = CStr(info(1))
-            price = info(2)
-            If qty <> 0 Then
-                unitPrice = price / qty
-            End If
-        End If
-        
-        ws.Cells(r, gMaxDepth + 1).Value = unitPrice
-        ws.Cells(r, gMaxDepth + 2).Value = unitStr
-        
-        r = r + 1
-    Next path
-    
-    ' 見やすさ用に列幅自動調整
-    ws.Columns.AutoFit
 End Sub
 
 
