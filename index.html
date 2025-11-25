@@ -17,11 +17,7 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-
-
-
-
-
+  
 Option Explicit
 
 Public Sub 展開レシピ階層を作成()
@@ -36,10 +32,12 @@ Public Sub 展開レシピ階層を作成()
     Dim allPaths As Collection
     Dim maxDepth As Long
     
-    Set wsB = ThisWorkbook.Worksheets("B")   ' レシピ（元Bシート）
-    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品（元Cシート）
-    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材（元Dシート）
-    Set wsE = ThisWorkbook.Worksheets("E")   ' 展開結果を書きたいシート
+    ' ==== ★ここをあなたのシートタブ名に合わせて変えてください ====
+    Set wsB = ThisWorkbook.Worksheets("B")   ' レシピのシート（元Bシート）
+    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品のシート（元Cシート）
+    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材のシート（元Dシート）
+    Set wsE = ThisWorkbook.Worksheets("E")   ' 展開結果を書き出すシート
+    ' ==============================================================
     
     ' --- 辞書の用意 ---
     Set dictRecipeChildren = CreateObject("Scripting.Dictionary")
@@ -148,13 +146,13 @@ Public Sub 展開レシピ階層を作成()
         
     Loop
     
-    ' --- Eシートに書き出し ---
+    ' --- Eシートに書き出し（左から階層、足りないところは副食材で埋める） ---
     Dim ws As Worksheet
     Set ws = wsE
     
     ws.Cells.Clear ' ★Eシートだけクリア
     
-    ' ヘッダ
+    ' ヘッダ（階層1, 階層2, …）
     For i = 1 To maxDepth
         ws.Cells(1, i).Value = "階層" & i
     Next i
@@ -164,36 +162,59 @@ Public Sub 展開レシピ階層を作成()
     ' データ本体
     Dim r As Long
     Dim p As Variant
-    Dim offset As Long, col As Long
+    Dim col As Long
     Dim leafName As String
     Dim info As Variant
     Dim qty As Double, price As Double
     Dim unitPrice As Variant, unitStr As String
+    Dim vQty As Variant, vPrice As Variant
     
     r = 2
     For Each p In allPaths
         curPath = p
         L = UBound(curPath) + 1
-        offset = maxDepth - L
         
-        ' 階層部分（右寄せ）
+        ' パスを書き込む（左から順に）
         For i = 0 To L - 1
-            col = i + 1 + offset
-            ws.Cells(r, col).Value = curPath(i)
+            ws.Cells(r, i + 1).Value = curPath(i)
         Next i
         
-        ' 一番右は副食材
+        ' 葉（最後の要素）は副食材
         leafName = curPath(UBound(curPath))
         
+        ' 足りない階層は全部「その副食材」で埋める
+        For col = L + 1 To maxDepth
+            ws.Cells(r, col).Value = leafName
+        Next col
+        
+        ' --- 副食材の単価と単位 ---
         unitPrice = ""
         unitStr = ""
+        
         If dictFukuInfo.Exists(leafName) Then
             info = dictFukuInfo(leafName)
-            qty = info(0)
+            
+            vQty = info(0)
+            vPrice = info(2)
             unitStr = CStr(info(1))
-            price = info(2)
-            If qty <> 0 Then
+            
+            ' 数値チェック
+            If IsNumeric(vQty) Then
+                qty = CDbl(vQty)
+            Else
+                qty = 0
+            End If
+            
+            If IsNumeric(vPrice) Then
+                price = CDbl(vPrice)
+            Else
+                price = 0
+            End If
+            
+            If qty <> 0 And price <> 0 Then
                 unitPrice = price / qty  ' 規格価格 ÷ 規格量
+            Else
+                unitPrice = ""           ' 0で割れない or どちらか欠損 → 空欄
             End If
         End If
         
@@ -221,7 +242,6 @@ Private Sub AddChild(ByVal dict As Object, ByVal parent As String, ByVal child A
         col.Add child
     End If
 End Sub
-
 
   
 
