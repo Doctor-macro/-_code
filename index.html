@@ -20,185 +20,52 @@
   
 Option Explicit
 
-Public Sub 展開レシピ階層を作成()
+' 仕込品の単価を新しいシート「仕込単価」に出すマクロ
+Public Sub 仕込品単価を計算()
 
-    Dim wsB As Worksheet, wsC As Worksheet, wsD As Worksheet, wsE As Worksheet
-    Dim dictRecipeChildren As Object ' レシピ -> 直下の仕込品/副食材（Bシート）
-    Dim dictShikomiChildren As Object ' 仕込品 -> 下の仕込品/副食材（Cシート）
-    Dim dictFukuInfo As Object ' 副食材 -> (分量, 単位, 価格)（Dシート）
+    Dim wsC As Worksheet, wsD As Worksheet, wsOut As Worksheet
+    Dim dictFukuUnit As Object          ' 副食材名 -> (単価, 単位)
+    Dim dictShikomiComp As Object       ' 仕込品名 -> Collection(材料行)
+    Dim dictShikomiBatch As Object      ' 仕込品名 -> (完成量, 単位)
+    Dim dictShikomiUnit As Object       ' 仕込品名 -> (単価, 単位)
     Dim lastRow As Long, i As Long
-    
     Dim key As Variant
-    Dim allPaths As Collection
-    Dim maxDepth As Long
     
     ' ==== ★ここをあなたのシートタブ名に合わせて変えてください ====
-    Set wsB = ThisWorkbook.Worksheets("B")   ' レシピのシート（元Bシート）
-    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品のシート（元Cシート）
-    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材のシート（元Dシート）
-    Set wsE = ThisWorkbook.Worksheets("E")   ' 展開結果を書き出すシート
+    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品の構造があるシート
+    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材マスタ（規格量・価格）
     ' ==============================================================
     
-    ' --- 辞書の用意 ---
-    Set dictRecipeChildren = CreateObject("Scripting.Dictionary")
-    Set dictShikomiChildren = CreateObject("Scripting.Dictionary")
-    Set dictFukuInfo = CreateObject("Scripting.Dictionary")
+    ' 出力用シート「仕込単価」を用意（なければ作る）
+    On Error Resume Next
+    Set wsOut = ThisWorkbook.Worksheets("仕込単価")
+    On Error GoTo 0
+    If wsOut Is Nothing Then
+        Set wsOut = ThisWorkbook.Worksheets.Add(After:=wsD)
+        wsOut.Name = "仕込単価"
+    End If
+    wsOut.Cells.Clear
     
-    ' --- Bシート：レシピ -> 直下の仕込品/副食材 ---
-    lastRow = wsB.Cells(wsB.Rows.Count, "A").End(xlUp).Row
-    For i = 2 To lastRow   ' 1行目ヘッダ想定
-        If wsB.Cells(i, "A").Value <> "" And wsB.Cells(i, "B").Value <> "" Then
-            Call AddChild(dictRecipeChildren, _
-                          CStr(wsB.Cells(i, "A").Value), _
-                          CStr(wsB.Cells(i, "B").Value))
-        End If
-    Next i
+    ' 辞書の用意
+    Set dictFukuUnit = CreateObject("Scripting.Dictionary")
+    Set dictShikomiComp = CreateObject("Scripting.Dictionary")
+    Set dictShikomiBatch = CreateObject("Scripting.Dictionary")
+    Set dictShikomiUnit = CreateObject("Scripting.Dictionary")
     
-    ' --- Cシート：仕込品 -> その下の仕込品/副食材 ---
-    lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
-    For i = 2 To lastRow
-        If wsC.Cells(i, "A").Value <> "" And wsC.Cells(i, "E").Value <> "" Then
-            Call AddChild(dictShikomiChildren, _
-                          CStr(wsC.Cells(i, "A").Value), _
-                          CStr(wsC.Cells(i, "E").Value))
-        End If
-    Next i
-    
-    ' --- Dシート：副食材 -> (規格量, 単位, 価格) ---
+    ' --- Dシート：副食材の単価を作成（規格価格 ÷ 規格量） ---
     lastRow = wsD.Cells(wsD.Rows.Count, "A").End(xlUp).Row
+    
     For i = 2 To lastRow
-        If wsD.Cells(i, "A").Value <> "" Then
-            dictFukuInfo(CStr(wsD.Cells(i, "A").Value)) = _
-                Array(wsD.Cells(i, "B").Value, wsD.Cells(i, "C").Value, wsD.Cells(i, "I").Value)
-        End If
-    Next i
-    
-    ' --- すべてのパス（レシピ → … → 副食材）を作る ---
-    Set allPaths = New Collection
-    maxDepth = 0
-    
-    Dim stack As Collection
-    Dim item As Variant
-    Dim curPath() As String
-    Dim newPath() As String
-    Dim parentName As String
-    Dim depth As Long
-    Dim children As Collection
-    Dim child As Variant
-    Dim j As Long, L As Long
-    
-    Set stack = New Collection
-    
-    ' レシピを初期ノードとしてスタックに積む
-    For Each key In dictRecipeChildren.Keys
-        ReDim curPath(0 To 0)
-        curPath(0) = CStr(key)
-        item = Array(curPath, CStr(key), 0) ' path, parentName, depth
-        stack.Add item
-    Next key
-    
-    ' スタックを使って木をたどる（再帰なし）
-    Do While stack.Count > 0
+        Dim fName As String
+        Dim vQty As Variant, vPrice As Variant, unitStr As String
+        Dim qty As Double, price As Double, unitPrice As Variant
         
-        item = stack(stack.Count)
-        stack.Remove stack.Count
-        
-        curPath = item(0)
-        parentName = CStr(item(1))
-        depth = CLng(item(2))
-        
-        Set children = Nothing
-        
-        ' depth=0 のときだけ「レシピ -> Bシートの子」を見る
-        If dictRecipeChildren.Exists(parentName) And depth = 0 Then
-            Set children = dictRecipeChildren(parentName)
-        ' それ以外は「仕込品 -> Cシートの子」
-        ElseIf dictShikomiChildren.Exists(parentName) Then
-            Set children = dictShikomiChildren(parentName)
-        End If
-        
-        ' 子がいない場合＝葉
-        If children Is Nothing Then
-            allPaths.Add curPath
-            L = UBound(curPath) + 1
-            If L > maxDepth Then maxDepth = L
-        Else
-            ' 子がいる場合、それぞれについて処理
-            For Each child In children
-                ReDim newPath(0 To UBound(curPath) + 1)
-                For j = 0 To UBound(curPath)
-                    newPath(j) = curPath(j)
-                Next j
-                newPath(UBound(newPath)) = CStr(child)
-                
-                ' 【副】なら葉として保存
-                If Left$(CStr(child), 3) = "【副】" Then
-                    allPaths.Add newPath
-                    L = UBound(newPath) + 1
-                    If L > maxDepth Then maxDepth = L
-                Else
-                    ' さらに下に潜る仕込品なのでスタックに積む
-                    item = Array(newPath, CStr(child), depth + 1)
-                    stack.Add item
-                End If
-            Next child
-        End If
-        
-    Loop
-    
-    ' --- Eシートに書き出し（左から階層、足りないところは副食材で埋める） ---
-    Dim ws As Worksheet
-    Set ws = wsE
-    
-    ws.Cells.Clear ' ★Eシートだけクリア
-    
-    ' ヘッダ（階層1, 階層2, …）
-    For i = 1 To maxDepth
-        ws.Cells(1, i).Value = "階層" & i
-    Next i
-    ws.Cells(1, maxDepth + 1).Value = "副食材単価"
-    ws.Cells(1, maxDepth + 2).Value = "副食材単位"
-    
-    ' データ本体
-    Dim r As Long
-    Dim p As Variant
-    Dim col As Long
-    Dim leafName As String
-    Dim info As Variant
-    Dim qty As Double, price As Double
-    Dim unitPrice As Variant, unitStr As String
-    Dim vQty As Variant, vPrice As Variant
-    
-    r = 2
-    For Each p In allPaths
-        curPath = p
-        L = UBound(curPath) + 1
-        
-        ' パスを書き込む（左から順に）
-        For i = 0 To L - 1
-            ws.Cells(r, i + 1).Value = curPath(i)
-        Next i
-        
-        ' 葉（最後の要素）は副食材
-        leafName = curPath(UBound(curPath))
-        
-        ' 足りない階層は全部「その副食材」で埋める
-        For col = L + 1 To maxDepth
-            ws.Cells(r, col).Value = leafName
-        Next col
-        
-        ' --- 副食材の単価と単位 ---
-        unitPrice = ""
-        unitStr = ""
-        
-        If dictFukuInfo.Exists(leafName) Then
-            info = dictFukuInfo(leafName)
+        fName = CStr(wsD.Cells(i, "A").Value)
+        If fName <> "" Then
+            vQty = wsD.Cells(i, "B").Value
+            vPrice = wsD.Cells(i, "I").Value
+            unitStr = CStr(wsD.Cells(i, "C").Value)
             
-            vQty = info(0)
-            vPrice = info(2)
-            unitStr = CStr(info(1))
-            
-            ' 数値チェック
             If IsNumeric(vQty) Then
                 qty = CDbl(vQty)
             Else
@@ -212,36 +79,216 @@ Public Sub 展開レシピ階層を作成()
             End If
             
             If qty <> 0 And price <> 0 Then
-                unitPrice = price / qty  ' 規格価格 ÷ 規格量
+                unitPrice = price / qty     ' 円 / 単位
             Else
-                unitPrice = ""           ' 0で割れない or どちらか欠損 → 空欄
+                unitPrice = Empty
+            End If
+            
+            dictFukuUnit(fName) = Array(unitPrice, unitStr)
+        End If
+    Next i
+    
+    ' --- Cシート：仕込品の構造を読み込み ---
+    lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
+    
+    For i = 2 To lastRow
+        Dim sName As String              ' 仕込品名
+        Dim compName As String           ' 材料名（仕込品 or 副食材）
+        Dim compType As String           ' 種別（仕込品 / 副食材）
+        Dim compQtyVar As Variant        ' 使用量(Variant)
+        Dim compQty As Double
+        Dim compUnit As String
+        Dim batchQtyVar As Variant, batchQty As Double
+        Dim batchUnit As String
+        Dim col As Collection
+        
+        sName = CStr(wsC.Cells(i, "A").Value)
+        If sName <> "" Then
+            
+            ' 完成量・単位（仕込品全体のバッチ）
+            batchQtyVar = wsC.Cells(i, "C").Value
+            batchUnit = CStr(wsC.Cells(i, "D").Value)
+            If Not dictShikomiBatch.Exists(sName) Then
+                If IsNumeric(batchQtyVar) Then
+                    batchQty = CDbl(batchQtyVar)
+                Else
+                    batchQty = 0
+                End If
+                dictShikomiBatch(sName) = Array(batchQty, batchUnit)
+            End If
+            
+            ' 材料（E～H）
+            compName = CStr(wsC.Cells(i, "E").Value)
+            If compName <> "" Then
+                compType = CStr(wsC.Cells(i, "F").Value)
+                compQtyVar = wsC.Cells(i, "G").Value
+                compUnit = CStr(wsC.Cells(i, "H").Value)
+                
+                If IsNumeric(compQtyVar) Then
+                    compQty = CDbl(compQtyVar)
+                Else
+                    compQty = 0
+                End If
+                
+                If dictShikomiComp.Exists(sName) Then
+                    Set col = dictShikomiComp(sName)
+                Else
+                    Set col = New Collection
+                    dictShikomiComp.Add sName, col
+                End If
+                
+                ' 材料1つ分の情報を格納：名前, 種別, 使用量, 単位
+                col.Add Array(compName, compType, compQty, compUnit)
+            End If
+        End If
+    Next i
+    
+    ' --- 各仕込品について単価計算（再帰的に） ---
+    For Each key In dictShikomiComp.Keys
+        Dim visited As Object
+        Set visited = CreateObject("Scripting.Dictionary")
+        Call CalcShikomiUnitPrice(CStr(key), dictShikomiComp, dictShikomiBatch, _
+                                  dictFukuUnit, dictShikomiUnit, visited)
+    Next key
+    
+    ' --- 結果を「仕込単価」シートに出力 ---
+    Dim r As Long
+    r = 1
+    wsOut.Cells(r, 1).Value = "仕込品名"
+    wsOut.Cells(r, 2).Value = "完成量"
+    wsOut.Cells(r, 3).Value = "単位"
+    wsOut.Cells(r, 4).Value = "単位単価"
+    wsOut.Cells(r, 5).Value = "単価単位"   ' 例：円/g
+    
+    r = 2
+    For Each key In dictShikomiBatch.Keys
+        Dim batchInfo As Variant, unitInfo As Variant
+        Dim unitPriceSh As Variant, unitStrSh As String
+        
+        batchInfo = dictShikomiBatch(key)
+        If dictShikomiUnit.Exists(key) Then
+            unitInfo = dictShikomiUnit(key)
+            unitPriceSh = unitInfo(0)
+            unitStrSh = CStr(unitInfo(1))
+        Else
+            unitPriceSh = Empty
+            unitStrSh = CStr(batchInfo(1))
+        End If
+        
+        wsOut.Cells(r, 1).Value = CStr(key)
+        wsOut.Cells(r, 2).Value = batchInfo(0)      ' 完成量
+        wsOut.Cells(r, 3).Value = CStr(batchInfo(1)) ' 単位
+        wsOut.Cells(r, 4).Value = unitPriceSh       ' 単位単価（円/単位）
+        wsOut.Cells(r, 5).Value = "円/" & unitStrSh
+        
+        r = r + 1
+    Next key
+    
+    wsOut.Columns.AutoFit
+    
+    MsgBox "仕込品の単位単価を「仕込単価」シートに出力しました。", vbInformation
+
+End Sub
+
+' 再帰的に仕込品の単価を計算する
+Private Sub CalcShikomiUnitPrice( _
+    ByVal sName As String, _
+    ByVal dictShikomiComp As Object, _
+    ByVal dictShikomiBatch As Object, _
+    ByVal dictFukuUnit As Object, _
+    ByVal dictShikomiUnit As Object, _
+    ByVal visited As Object)
+
+    Dim comps As Collection
+    Dim batchInfo As Variant
+    Dim batchQty As Double, batchUnit As String
+    Dim totalCost As Double
+    Dim i As Long
+    Dim comp As Variant
+    Dim compName As String, compType As String
+    Dim compQty As Double, compUnit As String
+    Dim subInfo As Variant, subPrice As Variant, subUnit As String
+    Dim fInfo As Variant, fPrice As Variant, fUnit As String
+    
+    ' すでに計算済みなら何もしない
+    If dictShikomiUnit.Exists(sName) Then Exit Sub
+    
+    ' 巡回参照防止
+    If visited.Exists(sName) Then Exit Sub
+    visited.Add sName, True
+    
+    ' 構造 or バッチ情報がなければ計算不可
+    If Not dictShikomiComp.Exists(sName) Then Exit Sub
+    If Not dictShikomiBatch.Exists(sName) Then Exit Sub
+    
+    Set comps = dictShikomiComp(sName)
+    batchInfo = dictShikomiBatch(sName)
+    batchQty = batchInfo(0)
+    batchUnit = CStr(batchInfo(1))
+    
+    If batchQty = 0 Then
+        dictShikomiUnit(sName) = Array(Empty, batchUnit)
+        Exit Sub
+    End If
+    
+    totalCost = 0#
+    
+    ' 各材料のコストを積み上げ
+    For i = 1 To comps.Count
+        comp = comps(i)
+        compName = CStr(comp(0))
+        compType = CStr(comp(1))
+        compQty = CDbl(comp(2))
+        compUnit = CStr(comp(3))
+        
+        If compQty = 0 Then GoTo NextComp
+        
+        ' 副食材の場合
+        If compType = "副食材" Or Left$(compName, 3) = "【副】" Then
+            If dictFukuUnit.Exists(compName) Then
+                fInfo = dictFukuUnit(compName)
+                fPrice = fInfo(0)         ' 円/単位
+                fUnit = CStr(fInfo(1))    ' 例えば g
+                
+                If IsNumeric(fPrice) Then
+                    totalCost = totalCost + CDbl(fPrice) * compQty
+                End If
+            End If
+        
+        ' 仕込品の場合（再帰的に子の単価を計算）
+        ElseIf compType = "仕込品" Or Left$(compName, 3) = "【仕】" Then
+            ' まだ単価がなければ計算
+            If Not dictShikomiUnit.Exists(compName) Then
+                Call CalcShikomiUnitPrice(compName, dictShikomiComp, dictShikomiBatch, _
+                                          dictFukuUnit, dictShikomiUnit, visited)
+            End If
+            
+            If dictShikomiUnit.Exists(compName) Then
+                subInfo = dictShikomiUnit(compName)
+                subPrice = subInfo(0)     ' 円/単位
+                subUnit = CStr(subInfo(1))
+                
+                If IsNumeric(subPrice) Then
+                    totalCost = totalCost + CDbl(subPrice) * compQty
+                End If
             End If
         End If
         
-        ws.Cells(r, maxDepth + 1).Value = unitPrice
-        ws.Cells(r, maxDepth + 2).Value = unitStr
-        
-        r = r + 1
-    Next p
+NextComp:
+    Next i
     
-    ws.Columns.AutoFit
-    
-    MsgBox "Eシートに展開結果を作成しました。", vbInformation
-
-End Sub
-
-' 親→子リストを Dictionary に登録するだけの小さいSub
-Private Sub AddChild(ByVal dict As Object, ByVal parent As String, ByVal child As String)
-    Dim col As Collection
-    If Not dict.Exists(parent) Then
-        Set col = New Collection
-        col.Add child
-        dict.Add parent, col
+    ' バッチ全体のコスト ÷ 完成量 = 単位単価
+    Dim unitPrice As Variant
+    If totalCost = 0 Then
+        unitPrice = Empty
     Else
-        Set col = dict(parent)
-        col.Add child
+        unitPrice = totalCost / batchQty
     End If
+    
+    dictShikomiUnit(sName) = Array(unitPrice, batchUnit)
+
 End Sub
+
 
   
 
