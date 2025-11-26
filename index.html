@@ -262,33 +262,39 @@ Private Sub CalcShikomiUnitPrice_ByKey( _
     Dim subInfo As Variant, subPrice As Variant, subUnit As String
     Dim fInfo As Variant, fPrice As Variant, fUnit As String
     Dim k As Variant, childKey As String, found As Boolean
-
+    
+    ' ★ g 判定用
+    Dim totalQtyG As Double
+    Dim allG副食材のみ As Boolean
+    
     ' すでに計算済みなら何もしない
     If dictShikomiUnit.Exists(sKey) Then Exit Sub
-
+    
     ' 巡回参照防止
     If visited.Exists(sKey) Then Exit Sub
     visited.Add sKey, True
-
+    
     ' バッチ情報がなければ計算不可
     If Not dictShikomiBatch.Exists(sKey) Then Exit Sub
-
+    
     batchInfo = dictShikomiBatch(sKey)   ' (仕込名, 完成量, 単位)
     sName = CStr(batchInfo(0))
     batchQty = batchInfo(1)
     batchUnit = CStr(batchInfo(2))
-
+    
     If batchQty = 0 Then
         dictShikomiUnit(sKey) = Array(Empty, batchUnit)
         Exit Sub
     End If
-
+    
     totalCost = 0#
-
+    totalQtyG = 0#
+    allG副食材のみ = True   ' 後で条件を満たさなければ False に落とす
+    
     ' 材料がない仕込キーもありえるのでチェック
     If dictShikomiComp.Exists(sKey) Then
         Set comps = dictShikomiComp(sKey)
-
+        
         ' 各材料のコストを積み上げ
         For i = 1 To comps.Count
             comp = comps(i)
@@ -296,22 +302,30 @@ Private Sub CalcShikomiUnitPrice_ByKey( _
             compType = CStr(comp(1))
             compQty = CDbl(comp(2))
             compUnit = CStr(comp(3))
-
+            
             If compQty = 0 Then GoTo NextComp
-
+            
             ' 副食材の場合
             If compType = "副食材" Or Left$(compName, 3) = "【副】" Then
                 If dictFukuUnit.Exists(compName) Then
                     fInfo = dictFukuUnit(compName)
                     fPrice = fInfo(0)         ' 円/単位
                     fUnit = CStr(fInfo(1))    ' 例えば g
-
+                    
                     If IsNumeric(fPrice) Then
                         totalCost = totalCost + CDbl(fPrice) * compQty
+                        
+                        ' ★ D列もH列も g の場合だけ「g合計」に足したいので
+                        '   → ここでは「材料の単位が g か？」だけ見る
+                        If IsGUnit(compUnit) Then
+                            totalQtyG = totalQtyG + compQty
+                        Else
+                            allG副食材のみ = False
+                        End If
                     End If
                 End If
-
-            ' 仕込品の場合（名前ベースで別の仕込キーを探して使う）
+            
+            ' 仕込品を材料として使っている場合
             ElseIf compType = "仕込品" Or Left$(compName, 3) = "【仕】" Then
                 found = False
                 ' 同じ仕込名を含む仕込キーのうち、最初に見つかったものを利用
@@ -335,24 +349,54 @@ Private Sub CalcShikomiUnitPrice_ByKey( _
                         Exit For
                     End If
                 Next k
+                
+                ' 仕込品を1つでも材料に持っているなら
+                ' 「全部gの単純ブレンド」ではないとみなす
+                allG副食材のみ = False
+            Else
+                ' 種別がどちらでもない行があればブレンド条件は崩す
+                allG副食材のみ = False
             End If
-
+            
 NextComp:
         Next i
     End If
-
-    ' バッチ全体のコスト ÷ 完成量 = 単位単価
+    
+    ' バッチ全体のコスト ÷ 何で割るか をここで決める
     Dim unitPrice As Variant
     If totalCost = 0 Then
         unitPrice = Empty
     Else
-        unitPrice = totalCost / batchQty
+        ' ★ 条件：
+        '   ・完成量の単位（D列）が g 系
+        '   ・材料が全部「副食材かつ g 単位」
+        '   ・g合計 > 0
+        '   → gあたり単価 = totalCost / totalQtyG
+        If IsGUnit(batchUnit) And allG副食材のみ And totalQtyG > 0 Then
+            unitPrice = totalCost / totalQtyG   ' 例1：「円/g」にしたいケース
+        Else
+            unitPrice = totalCost / batchQty    ' 例2：「円/個」など元の仕様
+        End If
     End If
-
+    
     dictShikomiUnit(sKey) = Array(unitPrice, batchUnit)
 
 End Sub
 
+
+' 単位文字列が g かどうか判定（全角・半角・余計な空白を吸収）
+Private Function IsGUnit(ByVal u As String) As Boolean
+    Dim t As String
+    t = Trim$(u)
+    t = Replace(t, "　", "")  ' 全角スペース削除
+    t = Replace(t, " ", "")   ' 半角スペース削除
+    
+    If t = "g" Or t = "ｇ" Or t = "グラム" Then
+        IsGUnit = True
+    Else
+        IsGUnit = False
+    End If
+End Function
 
 
 
