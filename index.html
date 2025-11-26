@@ -88,8 +88,8 @@ Public Sub 仕込品単価を計算()
     Next i
     
     ' --- Cシート：仕込品の構造を読み込み ---
-    '   キーは「仕込名|完成量|単位」にすることで
-    '   同じ名前でも完成量・単位が違えば別物として扱う
+    '   ★1行＝1仕込バリエーションとして扱う
+    '   キーは「row番号」で一意にする
     lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
     
     For i = 2 To lastRow
@@ -103,6 +103,7 @@ Public Sub 仕込品単価を計算()
         Dim batchUnit As String
         Dim col As Collection
         Dim sKey As String
+        Dim dispName As String           ' 仕込単価シートに出す名前用
         
         sName = CStr(wsC.Cells(i, "A").Value)
         If sName <> "" Then
@@ -115,16 +116,21 @@ Public Sub 仕込品単価を計算()
                 batchQty = 0
             End If
             
-            ' 仕込キー（名前＋完成量＋単位）
-            sKey = sName & "|" & CStr(batchQty) & "|" & batchUnit
+            ' ★この行専用のキー（1行＝1バリエーション）
+            sKey = "ROW" & CStr(i)
             
-            ' バッチ情報の登録（同じキーなら上書きされても同内容想定）
-            If Not dictShikomiBatch.Exists(sKey) Then
-                dictShikomiBatch(sKey) = Array(sName, batchQty, batchUnit)
+            ' 表示名：仕込名 + /(材料名) みたいな形にする
+            compName = CStr(wsC.Cells(i, "E").Value)
+            If compName <> "" Then
+                dispName = sName & "/(" & compName & ")"
+            Else
+                dispName = sName
             End If
             
-            ' 材料（E～H）
-            compName = CStr(wsC.Cells(i, "E").Value)
+            ' バッチ情報登録（行ごとに必ず1レコード）
+            dictShikomiBatch(sKey) = Array(dispName, batchQty, batchUnit)
+            
+            ' 材料（E～H）この行1件分だけ登録
             If compName <> "" Then
                 compType = CStr(wsC.Cells(i, "F").Value)
                 compQtyVar = wsC.Cells(i, "G").Value
@@ -143,11 +149,12 @@ Public Sub 仕込品単価を計算()
                     dictShikomiComp.Add sKey, col
                 End If
                 
-                ' 材料1つ分の情報を格納：名前, 種別, 使用量, 単位
+                ' 材料1つ分の情報：名前, 種別, 使用量, 単位
                 col.Add Array(compName, compType, compQty, compUnit)
             End If
         End If
     Next i
+
     
     ' --- 各「仕込キー」について単価計算 ---
     For Each key In dictShikomiBatch.Keys
