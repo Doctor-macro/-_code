@@ -17,6 +17,12 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+
+
+
+
+
+  
 Option Explicit
 
 ' 仕込品の単価を新しいシート「仕込単価」に出すマクロ
@@ -29,12 +35,12 @@ Public Sub 仕込品単価を計算()
     Dim dictShikomiUnit As Object       ' 仕込キー -> (単価, 単位)
     Dim lastRow As Long, i As Long
     Dim key As Variant
-    
+
     ' ==== ★ここをあなたのシートタブ名に合わせて変えてください ====
-    Set wsC = Sheet2   ' 仕込品の構造があるシート
-    Set wsD = Sheet4   ' 副食材マスタ（規格量・価格）
+    Set wsC = ThisWorkbook.Worksheets("C")   ' 仕込品の構造があるシート
+    Set wsD = ThisWorkbook.Worksheets("D")   ' 副食材マスタ（規格量・価格）
     ' ==============================================================
-    
+
     ' 出力用シート「仕込単価」を用意（なければ作る）
     On Error Resume Next
     Set wsOut = ThisWorkbook.Worksheets("仕込単価")
@@ -44,54 +50,87 @@ Public Sub 仕込品単価を計算()
         wsOut.Name = "仕込単価"
     End If
     wsOut.Cells.Clear
-    
+
     ' 辞書の用意
     Set dictFukuUnit = CreateObject("Scripting.Dictionary")
     Set dictShikomiComp = CreateObject("Scripting.Dictionary")
     Set dictShikomiBatch = CreateObject("Scripting.Dictionary")
     Set dictShikomiUnit = CreateObject("Scripting.Dictionary")
-    
-    ' --- Dシート：副食材の単価を作成（規格価格 ÷ 規格量） ---
+
+    ' ===============================================
+    '  Dシート：副食材の加重平均単価を作成
+    '   - 同じ副食材名が複数行あれば
+    '     → 規格量と価格を合算してから「総価格 / 総量」で単価
+    ' ===============================================
     lastRow = wsD.Cells(wsD.Rows.Count, "A").End(xlUp).Row
-    
+
     For i = 2 To lastRow
         Dim fName As String
         Dim vQty As Variant, vPrice As Variant, unitStr As String
-        Dim qty As Double, price As Double, unitPrice As Variant
-        
+        Dim qty As Double, price As Double
+        Dim oldInfo As Variant, oldQty As Double, oldPrice As Double
+
         fName = CStr(wsD.Cells(i, "A").Value)
         If fName <> "" Then
             vQty = wsD.Cells(i, "B").Value
             vPrice = wsD.Cells(i, "I").Value
             unitStr = CStr(wsD.Cells(i, "C").Value)
-            
+
             If IsNumeric(vQty) Then
                 qty = CDbl(vQty)
             Else
                 qty = 0
             End If
-            
+
             If IsNumeric(vPrice) Then
                 price = CDbl(vPrice)
             Else
                 price = 0
             End If
-            
-            If qty <> 0 And price <> 0 Then
-                unitPrice = price / qty     ' 円 / 単位
-            Else
-                unitPrice = Empty
+
+            If qty > 0 And price > 0 Then
+                ' 同じ副食材名がすでにあれば合算する（加重平均用）
+                If dictFukuUnit.Exists(fName) Then
+                    oldInfo = dictFukuUnit(fName)
+                    oldQty = oldInfo(0)
+                    oldPrice = oldInfo(1)
+                    qty = qty + oldQty
+                    price = price + oldPrice
+                End If
+                ' ここでは「総量」「総価格」「単位」を一旦保存
+                dictFukuUnit(fName) = Array(qty, price, unitStr)
             End If
-            
-            dictFukuUnit(fName) = Array(unitPrice, unitStr)
         End If
     Next i
-    
-    ' --- Cシート：仕込品の構造を読み込み ---
-    '   ★1行＝1仕込バリエーションとして扱う
-    '   キーは「row番号」で一意にする
+
+    ' 総量と総価格から「1単位あたり単価」に変換
+    Dim fname2 As Variant
+    Dim combinedQty As Double, combinedPrice As Double
+    Dim unitP As Double, uStr As String, raw As Variant
+
+    For Each fname2 In dictFukuUnit.Keys
+        raw = dictFukuUnit(fname2)
+        combinedQty = raw(0)
+        combinedPrice = raw(1)
+        uStr = CStr(raw(2))
+
+        If combinedQty > 0 Then
+            unitP = combinedPrice / combinedQty   ' 円 / 単位（例：円/g）
+        Else
+            unitP = 0
+        End If
+
+        ' 最終的に：副食材名 -> (単価, 単位)
+        dictFukuUnit(fname2) = Array(unitP, uStr)
+    Next fname2
+
+    ' ===============================================
+    '  Cシート：仕込品の構造を読み込み
+    '   - キーは「仕込名|完成量|単位」
+    '   - 同じ仕込名・同じ完成量・同じ単位の行はまとめて1仕込みとして扱う
+    ' ===============================================
     lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
-    
+
     For i = 2 To lastRow
         Dim sName As String              ' 仕込品名
         Dim compName As String           ' 材料名（仕込品 or 副食材）
@@ -103,11 +142,10 @@ Public Sub 仕込品単価を計算()
         Dim batchUnit As String
         Dim col As Collection
         Dim sKey As String
-        Dim dispName As String           ' 仕込単価シートに出す名前用
-        
+
         sName = CStr(wsC.Cells(i, "A").Value)
         If sName <> "" Then
-            
+
             batchQtyVar = wsC.Cells(i, "C").Value
             batchUnit = CStr(wsC.Cells(i, "D").Value)
             If IsNumeric(batchQtyVar) Then
@@ -115,73 +153,71 @@ Public Sub 仕込品単価を計算()
             Else
                 batchQty = 0
             End If
-            
-            ' ★この行専用のキー（1行＝1バリエーション）
-            sKey = "ROW" & CStr(i)
-            
-            ' 表示名：仕込名 + /(材料名) みたいな形にする
-            compName = CStr(wsC.Cells(i, "E").Value)
-            If compName <> "" Then
-                dispName = sName & "/(" & compName & ")"
-            Else
-                dispName = sName
+
+            ' 仕込キー（仕込名＋完成量＋単位）
+            sKey = sName & "|" & CStr(batchQty) & "|" & batchUnit
+
+            ' バッチ情報の登録（同じキーなら1回だけ保持）
+            If Not dictShikomiBatch.Exists(sKey) Then
+                dictShikomiBatch(sKey) = Array(sName, batchQty, batchUnit)
             End If
-            
-            ' バッチ情報登録（行ごとに必ず1レコード）
-            dictShikomiBatch(sKey) = Array(dispName, batchQty, batchUnit)
-            
-            ' 材料（E～H）この行1件分だけ登録
+
+            ' 材料（E～H）
+            compName = CStr(wsC.Cells(i, "E").Value)
             If compName <> "" Then
                 compType = CStr(wsC.Cells(i, "F").Value)
                 compQtyVar = wsC.Cells(i, "G").Value
                 compUnit = CStr(wsC.Cells(i, "H").Value)
-                
+
                 If IsNumeric(compQtyVar) Then
                     compQty = CDbl(compQtyVar)
                 Else
                     compQty = 0
                 End If
-                
+
                 If dictShikomiComp.Exists(sKey) Then
                     Set col = dictShikomiComp(sKey)
                 Else
                     Set col = New Collection
                     dictShikomiComp.Add sKey, col
                 End If
-                
-                ' 材料1つ分の情報：名前, 種別, 使用量, 単位
+
+                ' 材料1つ分の情報を格納：名前, 種別, 使用量, 単位
                 col.Add Array(compName, compType, compQty, compUnit)
             End If
         End If
     Next i
 
-    
-    ' --- 各「仕込キー」について単価計算 ---
+    ' ===============================================
+    '  各仕込キーについて単価計算（再帰可能）
+    ' ===============================================
     For Each key In dictShikomiBatch.Keys
         Dim visited As Object
         Set visited = CreateObject("Scripting.Dictionary")
         Call CalcShikomiUnitPrice_ByKey(CStr(key), dictShikomiComp, dictShikomiBatch, _
                                         dictFukuUnit, dictShikomiUnit, visited)
     Next key
-    
-    ' --- 結果を「仕込単価」シートに出力 ---
+
+    ' ===============================================
+    '  結果を「仕込単価」シートに出力
+    ' ===============================================
     Dim r As Long
     r = 1
     wsOut.Cells(r, 1).Value = "仕込品名"
     wsOut.Cells(r, 2).Value = "完成量"
     wsOut.Cells(r, 3).Value = "単位"
     wsOut.Cells(r, 4).Value = "単位単価"
-    wsOut.Cells(r, 5).Value = "単価単位"   ' 例：円/g
-    
+    wsOut.Cells(r, 5).Value = "単価単位"   ' 例：円/g, 円/食 など
+
     r = 2
+    Dim batchInfo As Variant, unitInfo As Variant
+    Dim unitPriceSh As Variant, unitStrSh As String
+    Dim sNameOut As String
+
     For Each key In dictShikomiBatch.Keys
-        Dim batchInfo As Variant, unitInfo As Variant
-        Dim unitPriceSh As Variant, unitStrSh As String
-        Dim sNameOut As String
-        
         batchInfo = dictShikomiBatch(key)   ' (仕込名, 完成量, 単位)
         sNameOut = CStr(batchInfo(0))
-        
+
         If dictShikomiUnit.Exists(key) Then
             unitInfo = dictShikomiUnit(key)
             unitPriceSh = unitInfo(0)
@@ -190,18 +226,18 @@ Public Sub 仕込品単価を計算()
             unitPriceSh = Empty
             unitStrSh = CStr(batchInfo(2))
         End If
-        
+
         wsOut.Cells(r, 1).Value = sNameOut
-        wsOut.Cells(r, 2).Value = batchInfo(1)      ' 完成量
+        wsOut.Cells(r, 2).Value = batchInfo(1)       ' 完成量
         wsOut.Cells(r, 3).Value = CStr(batchInfo(2)) ' 単位
-        wsOut.Cells(r, 4).Value = unitPriceSh       ' 単位単価（円/単位）
+        wsOut.Cells(r, 4).Value = unitPriceSh        ' 単位単価（円/単位）
         wsOut.Cells(r, 5).Value = "円/" & unitStrSh
-        
+
         r = r + 1
     Next key
-    
+
     wsOut.Columns.AutoFit
-    
+
     MsgBox "仕込品の単位単価を「仕込単価」シートに出力しました。", vbInformation
 
 End Sub
@@ -225,33 +261,34 @@ Private Sub CalcShikomiUnitPrice_ByKey( _
     Dim compQty As Double, compUnit As String
     Dim subInfo As Variant, subPrice As Variant, subUnit As String
     Dim fInfo As Variant, fPrice As Variant, fUnit As String
-    
+    Dim k As Variant, childKey As String, found As Boolean
+
     ' すでに計算済みなら何もしない
     If dictShikomiUnit.Exists(sKey) Then Exit Sub
-    
+
     ' 巡回参照防止
     If visited.Exists(sKey) Then Exit Sub
     visited.Add sKey, True
-    
-    ' 構造 or バッチ情報がなければ計算不可
+
+    ' バッチ情報がなければ計算不可
     If Not dictShikomiBatch.Exists(sKey) Then Exit Sub
-    
+
     batchInfo = dictShikomiBatch(sKey)   ' (仕込名, 完成量, 単位)
     sName = CStr(batchInfo(0))
     batchQty = batchInfo(1)
     batchUnit = CStr(batchInfo(2))
-    
+
     If batchQty = 0 Then
         dictShikomiUnit(sKey) = Array(Empty, batchUnit)
         Exit Sub
     End If
-    
+
     totalCost = 0#
-    
+
     ' 材料がない仕込キーもありえるのでチェック
     If dictShikomiComp.Exists(sKey) Then
         Set comps = dictShikomiComp(sKey)
-        
+
         ' 各材料のコストを積み上げ
         For i = 1 To comps.Count
             comp = comps(i)
@@ -259,29 +296,28 @@ Private Sub CalcShikomiUnitPrice_ByKey( _
             compType = CStr(comp(1))
             compQty = CDbl(comp(2))
             compUnit = CStr(comp(3))
-            
+
             If compQty = 0 Then GoTo NextComp
-            
+
             ' 副食材の場合
             If compType = "副食材" Or Left$(compName, 3) = "【副】" Then
                 If dictFukuUnit.Exists(compName) Then
                     fInfo = dictFukuUnit(compName)
                     fPrice = fInfo(0)         ' 円/単位
                     fUnit = CStr(fInfo(1))    ' 例えば g
-                    
+
                     If IsNumeric(fPrice) Then
                         totalCost = totalCost + CDbl(fPrice) * compQty
                     End If
                 End If
-            
+
             ' 仕込品の場合（名前ベースで別の仕込キーを探して使う）
             ElseIf compType = "仕込品" Or Left$(compName, 3) = "【仕】" Then
-                Dim k As Variant, childKey As String, found As Boolean
                 found = False
                 ' 同じ仕込名を含む仕込キーのうち、最初に見つかったものを利用
                 For Each k In dictShikomiBatch.Keys
                     childKey = CStr(k)
-                    If Left$(dictShikomiBatch(childKey)(0), Len(compName)) = compName Then
+                    If CStr(dictShikomiBatch(childKey)(0)) = compName Then
                         ' まだ計算されていなければ計算
                         If Not dictShikomiUnit.Exists(childKey) Then
                             Call CalcShikomiUnitPrice_ByKey(childKey, dictShikomiComp, dictShikomiBatch, _
@@ -300,11 +336,11 @@ Private Sub CalcShikomiUnitPrice_ByKey( _
                     End If
                 Next k
             End If
-            
+
 NextComp:
         Next i
     End If
-    
+
     ' バッチ全体のコスト ÷ 完成量 = 単位単価
     Dim unitPrice As Variant
     If totalCost = 0 Then
@@ -312,10 +348,11 @@ NextComp:
     Else
         unitPrice = totalCost / batchQty
     End If
-    
+
     dictShikomiUnit(sKey) = Array(unitPrice, batchUnit)
 
 End Sub
+
 
 
 
