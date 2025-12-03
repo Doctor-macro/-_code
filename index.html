@@ -18,385 +18,228 @@
 <pre><code>
 
 
-
-
-
-
-  
 Option Explicit
 
-' 仕込品の単価を新しいシート「仕込単価」に出すマクロ
-Public Sub 仕込品単価を計算()
-
-    Dim wsC As Worksheet, wsD As Worksheet, wsOut As Worksheet
-    Dim dictFukuUnit As Object          ' 副食材名 -> (単価, 単位)
-    Dim dictShikomiComp As Object       ' 仕込キー -> Collection(材料行)
-    Dim dictShikomiBatch As Object      ' 仕込キー -> (仕込名, 完成量, 単位)
-    Dim dictShikomiUnit As Object       ' 仕込キー -> (単価, 単位)
-    Dim lastRow As Long, i As Long
-    Dim key As Variant
-
-    ' ==== ★ここをあなたのシートタブ名に合わせて変えてください ====
-    Set wsC = Sheet2   ' 仕込品の構造があるシート
-    Set wsD = Sheet4   ' 副食材マスタ（規格量・価格）
-    ' ==============================================================
-
-    ' 出力用シート「仕込単価」を用意（なければ作る）
-    On Error Resume Next
-    Set wsOut = ThisWorkbook.Worksheets("仕込単価")
-    On Error GoTo 0
-    If wsOut Is Nothing Then
-        Set wsOut = ThisWorkbook.Worksheets.Add(After:=wsD)
-        wsOut.Name = "仕込単価"
-    End If
-    wsOut.Cells.Clear
-
-    ' 辞書の用意
-    Set dictFukuUnit = CreateObject("Scripting.Dictionary")
-    Set dictShikomiComp = CreateObject("Scripting.Dictionary")
-    Set dictShikomiBatch = CreateObject("Scripting.Dictionary")
-    Set dictShikomiUnit = CreateObject("Scripting.Dictionary")
-
-    ' ===============================================
-    '  Dシート：副食材の加重平均単価を作成
-    '   - 同じ副食材名が複数行あれば
-    '     → 規格量と価格を合算してから「総価格 / 総量」で単価
-    ' ===============================================
-    lastRow = wsD.Cells(wsD.Rows.Count, "A").End(xlUp).Row
-
-    For i = 2 To lastRow
-        Dim fName As String
-        Dim vQty As Variant, vPrice As Variant, unitStr As String
-        Dim qty As Double, price As Double
-        Dim oldInfo As Variant, oldQty As Double, oldPrice As Double
-
-        fName = CStr(wsD.Cells(i, "A").Value)
-        If fName <> "" Then
-            vQty = wsD.Cells(i, "B").Value
-            vPrice = wsD.Cells(i, "I").Value
-            unitStr = CStr(wsD.Cells(i, "C").Value)
-
-            If IsNumeric(vQty) Then
-                qty = CDbl(vQty)
-            Else
-                qty = 0
-            End If
-
-            If IsNumeric(vPrice) Then
-                price = CDbl(vPrice)
-            Else
-                price = 0
-            End If
-
-            If qty > 0 And price > 0 Then
-                ' 同じ副食材名がすでにあれば合算する（加重平均用）
-                If dictFukuUnit.Exists(fName) Then
-                    oldInfo = dictFukuUnit(fName)
-                    oldQty = oldInfo(0)
-                    oldPrice = oldInfo(1)
-                    qty = qty + oldQty
-                    price = price + oldPrice
-                End If
-                ' ここでは「総量」「総価格」「単位」を一旦保存
-                dictFukuUnit(fName) = Array(qty, price, unitStr)
-            End If
-        End If
-    Next i
-
-    ' 総量と総価格から「1単位あたり単価」に変換
-    Dim fname2 As Variant
-    Dim combinedQty As Double, combinedPrice As Double
-    Dim unitP As Double, uStr As String, raw As Variant
-
-    For Each fname2 In dictFukuUnit.Keys
-        raw = dictFukuUnit(fname2)
-        combinedQty = raw(0)
-        combinedPrice = raw(1)
-        uStr = CStr(raw(2))
-
-        If combinedQty > 0 Then
-            unitP = combinedPrice / combinedQty   ' 円 / 単位（例：円/g）
-        Else
-            unitP = 0
-        End If
-
-        ' 最終的に：副食材名 -> (単価, 単位)
-        dictFukuUnit(fname2) = Array(unitP, uStr)
-    Next fname2
-
-    ' ===============================================
-    '  Cシート：仕込品の構造を読み込み
-    '   - キーは「仕込名|完成量|単位」
-    '   - 同じ仕込名・同じ完成量・同じ単位の行はまとめて1仕込みとして扱う
-    ' ===============================================
-    lastRow = wsC.Cells(wsC.Rows.Count, "A").End(xlUp).Row
-
-    For i = 2 To lastRow
-        Dim sName As String              ' 仕込品名
-        Dim compName As String           ' 材料名（仕込品 or 副食材）
-        Dim compType As String           ' 種別（仕込品 / 副食材）
-        Dim compQtyVar As Variant        ' 使用量(Variant)
-        Dim compQty As Double
-        Dim compUnit As String
-        Dim batchQtyVar As Variant, batchQty As Double
-        Dim batchUnit As String
-        Dim col As Collection
-        Dim sKey As String
-
-        sName = CStr(wsC.Cells(i, "A").Value)
-        If sName <> "" Then
-
-            batchQtyVar = wsC.Cells(i, "C").Value
-            batchUnit = CStr(wsC.Cells(i, "D").Value)
-            If IsNumeric(batchQtyVar) Then
-                batchQty = CDbl(batchQtyVar)
-            Else
-                batchQty = 0
-            End If
-
-            ' 仕込キー（仕込名＋完成量＋単位）
-            sKey = sName & "|" & CStr(batchQty) & "|" & batchUnit
-
-            ' バッチ情報の登録（同じキーなら1回だけ保持）
-            If Not dictShikomiBatch.Exists(sKey) Then
-                dictShikomiBatch(sKey) = Array(sName, batchQty, batchUnit)
-            End If
-
-            ' 材料（E～H）
-            compName = CStr(wsC.Cells(i, "E").Value)
-            If compName <> "" Then
-                compType = CStr(wsC.Cells(i, "F").Value)
-                compQtyVar = wsC.Cells(i, "G").Value
-                compUnit = CStr(wsC.Cells(i, "H").Value)
-
-                If IsNumeric(compQtyVar) Then
-                    compQty = CDbl(compQtyVar)
-                Else
-                    compQty = 0
-                End If
-
-                If dictShikomiComp.Exists(sKey) Then
-                    Set col = dictShikomiComp(sKey)
-                Else
-                    Set col = New Collection
-                    dictShikomiComp.Add sKey, col
-                End If
-
-                ' 材料1つ分の情報を格納：名前, 種別, 使用量, 単位
-                col.Add Array(compName, compType, compQty, compUnit)
-            End If
-        End If
-    Next i
-
-    ' ===============================================
-    '  各仕込キーについて単価計算（再帰可能）
-    ' ===============================================
-    For Each key In dictShikomiBatch.Keys
-        Dim visited As Object
-        Set visited = CreateObject("Scripting.Dictionary")
-        Call CalcShikomiUnitPrice_ByKey(CStr(key), dictShikomiComp, dictShikomiBatch, _
-                                        dictFukuUnit, dictShikomiUnit, visited)
-    Next key
-
-    ' ===============================================
-    '  結果を「仕込単価」シートに出力
-    ' ===============================================
-    Dim r As Long
-    r = 1
-    wsOut.Cells(r, 1).Value = "仕込品名"
-    wsOut.Cells(r, 2).Value = "完成量"
-    wsOut.Cells(r, 3).Value = "単位"
-    wsOut.Cells(r, 4).Value = "単位単価"
-    wsOut.Cells(r, 5).Value = "単価単位"   ' 例：円/g, 円/食 など
-
-    r = 2
-    Dim batchInfo As Variant, unitInfo As Variant
-    Dim unitPriceSh As Variant, unitStrSh As String
-    Dim sNameOut As String
-
-    For Each key In dictShikomiBatch.Keys
-        batchInfo = dictShikomiBatch(key)   ' (仕込名, 完成量, 単位)
-        sNameOut = CStr(batchInfo(0))
-
-        If dictShikomiUnit.Exists(key) Then
-            unitInfo = dictShikomiUnit(key)
-            unitPriceSh = unitInfo(0)
-            unitStrSh = CStr(unitInfo(1))
-        Else
-            unitPriceSh = Empty
-            unitStrSh = CStr(batchInfo(2))
-        End If
-
-        wsOut.Cells(r, 1).Value = sNameOut
-        wsOut.Cells(r, 2).Value = batchInfo(1)       ' 完成量
-        wsOut.Cells(r, 3).Value = CStr(batchInfo(2)) ' 単位
-        wsOut.Cells(r, 4).Value = unitPriceSh        ' 単位単価（円/単位）
-        wsOut.Cells(r, 5).Value = "円/" & unitStrSh
-
-        r = r + 1
-    Next key
-
-    wsOut.Columns.AutoFit
-
-    MsgBox "仕込品の単位単価を「仕込単価」シートに出力しました。", vbInformation
-
-End Sub
-
-' 仕込キー（仕込名＋完成量＋単位）単位で単価を計算
-Private Sub CalcShikomiUnitPrice_ByKey( _
-    ByVal sKey As String, _
-    ByVal dictShikomiComp As Object, _
-    ByVal dictShikomiBatch As Object, _
-    ByVal dictFukuUnit As Object, _
-    ByVal dictShikomiUnit As Object, _
-    ByVal visited As Object)
-
-    Dim comps As Collection
-    Dim batchInfo As Variant
-    Dim batchQty As Double, batchUnit As String, sName As String
-    Dim totalCost As Double
-    Dim i As Long
-    Dim comp As Variant
-    Dim compName As String, compType As String
-    Dim compQty As Double, compUnit As String
-    Dim subInfo As Variant, subPrice As Variant, subUnit As String
-    Dim fInfo As Variant, fPrice As Variant, fUnit As String
-    Dim k As Variant, childKey As String, found As Boolean
+' 結合セルを含めて、そのセルが属する結合ブロックの左上セルの文字列を返す
+Private Function GetMergedText(rng As Range) As String
+    Dim tmp As Range
     
-    ' ★ g 判定用
-    Dim totalQtyG As Double
-    Dim allG副食材のみ As Boolean
-    
-    ' すでに計算済みなら何もしない
-    If dictShikomiUnit.Exists(sKey) Then Exit Sub
-    
-    ' 巡回参照防止
-    If visited.Exists(sKey) Then Exit Sub
-    visited.Add sKey, True
-    
-    ' バッチ情報がなければ計算不可
-    If Not dictShikomiBatch.Exists(sKey) Then Exit Sub
-    
-    batchInfo = dictShikomiBatch(sKey)   ' (仕込名, 完成量, 単位)
-    sName = CStr(batchInfo(0))
-    batchQty = batchInfo(1)
-    batchUnit = CStr(batchInfo(2))
-    
-    If batchQty = 0 Then
-        dictShikomiUnit(sKey) = Array(Empty, batchUnit)
-        Exit Sub
+    If rng Is Nothing Then
+        GetMergedText = ""
+        Exit Function
     End If
     
-    totalCost = 0#
-    totalQtyG = 0#
-    allG副食材のみ = True   ' 後で条件を満たさなければ False に落とす
-    
-    ' 材料がない仕込キーもありえるのでチェック
-    If dictShikomiComp.Exists(sKey) Then
-        Set comps = dictShikomiComp(sKey)
-        
-        ' 各材料のコストを積み上げ
-        For i = 1 To comps.Count
-            comp = comps(i)
-            compName = CStr(comp(0))
-            compType = CStr(comp(1))
-            compQty = CDbl(comp(2))
-            compUnit = CStr(comp(3))
-            
-            If compQty = 0 Then GoTo NextComp
-            
-            ' 副食材の場合
-            If compType = "副食材" Or Left$(compName, 3) = "【副】" Then
-                If dictFukuUnit.Exists(compName) Then
-                    fInfo = dictFukuUnit(compName)
-                    fPrice = fInfo(0)         ' 円/単位
-                    fUnit = CStr(fInfo(1))    ' 例えば g
-                    
-                    If IsNumeric(fPrice) Then
-                        totalCost = totalCost + CDbl(fPrice) * compQty
-                        
-                        ' ★ D列もH列も g の場合だけ「g合計」に足したいので
-                        '   → ここでは「材料の単位が g か？」だけ見る
-                        If IsGUnit(compUnit) Then
-                            totalQtyG = totalQtyG + compQty
-                        Else
-                            allG副食材のみ = False
-                        End If
-                    End If
-                End If
-            
-            ' 仕込品を材料として使っている場合
-            ElseIf compType = "仕込品" Or Left$(compName, 3) = "【仕】" Then
-                found = False
-                ' 同じ仕込名を含む仕込キーのうち、最初に見つかったものを利用
-                For Each k In dictShikomiBatch.Keys
-                    childKey = CStr(k)
-                    If CStr(dictShikomiBatch(childKey)(0)) = compName Then
-                        ' まだ計算されていなければ計算
-                        If Not dictShikomiUnit.Exists(childKey) Then
-                            Call CalcShikomiUnitPrice_ByKey(childKey, dictShikomiComp, dictShikomiBatch, _
-                                                             dictFukuUnit, dictShikomiUnit, visited)
-                        End If
-                        If dictShikomiUnit.Exists(childKey) Then
-                            subInfo = dictShikomiUnit(childKey)
-                            subPrice = subInfo(0)     ' 円/単位
-                            subUnit = CStr(subInfo(1))
-                            If IsNumeric(subPrice) Then
-                                totalCost = totalCost + CDbl(subPrice) * compQty
-                            End If
-                        End If
-                        found = True
-                        Exit For
-                    End If
-                Next k
-                
-                ' 仕込品を1つでも材料に持っているなら
-                ' 「全部gの単純ブレンド」ではないとみなす
-                allG副食材のみ = False
-            Else
-                ' 種別がどちらでもない行があればブレンド条件は崩す
-                allG副食材のみ = False
-            End If
-            
-NextComp:
-        Next i
-    End If
-    
-    ' バッチ全体のコスト ÷ 何で割るか をここで決める
-    Dim unitPrice As Variant
-    If totalCost = 0 Then
-        unitPrice = Empty
+    If rng.MergeCells Then
+        Set tmp = rng.MergeArea.Cells(1, 1) ' 結合範囲の左上
+        GetMergedText = CStr(tmp.Value)
     Else
-        ' ★ 条件：
-        '   ・完成量の単位（D列）が g 系
-        '   ・材料が全部「副食材かつ g 単位」
-        '   ・g合計 > 0
-        '   → gあたり単価 = totalCost / totalQtyG
-        If IsGUnit(batchUnit) And allG副食材のみ And totalQtyG > 0 Then
-            unitPrice = totalCost / totalQtyG   ' 例1：「円/g」にしたいケース
-        Else
-            unitPrice = totalCost / batchQty    ' 例2：「円/個」など元の仕様
-        End If
-    End If
-    
-    dictShikomiUnit(sKey) = Array(unitPrice, batchUnit)
-
-End Sub
-
-
-' 単位文字列が g かどうか判定（全角・半角・余計な空白を吸収）
-Private Function IsGUnit(ByVal u As String) As Boolean
-    Dim t As String
-    t = Trim$(u)
-    t = Replace(t, "　", "")  ' 全角スペース削除
-    t = Replace(t, " ", "")   ' 半角スペース削除
-    
-    If t = "g" Or t = "ｇ" Or t = "グラム" Then
-        IsGUnit = True
-    Else
-        IsGUnit = False
+        GetMergedText = CStr(rng.Value)
     End If
 End Function
+
+
+' 本社シート（第1〜第5階層）の情報を統合形式に変換して
+' このブックの「本社_統合」シートに出力する
+Public Sub 本社階層表_統合出力()
+
+    Dim fPath As Variant
+    Dim wbSrc As Workbook
+    Dim wsSrc As Worksheet
+    
+    Dim wbDst As Workbook
+    Dim wsDst As Worksheet
+    
+    Dim levelNames(1 To 5) As String
+    Dim levelCol(1 To 5) As Long
+    Dim i As Long
+    
+    Dim hierRow As Long          ' 「第1階層〜第5階層」が並んでいる行
+    Dim headerRow As Long        ' 「部門コード」「部門名称」「職位」… の見出し行
+    Dim dataStartRow As Long     ' データ開始行
+    Dim lastRow As Long
+    
+    Dim r As Long
+    Dim outRow As Long
+    
+    Dim lvl As Long
+    Dim activeLevel As Long
+    
+    Dim colCode As Long, colName As Long
+    Dim colTitle As Long, colEmpNo As Long, colEmpName As Long
+    
+    Dim valTitle As String, valEmpNo As String, valEmpName As String
+    Dim tmpCode As String, tmpName As String
+    
+    On Error GoTo ErrHandler
+    
+    Application.ScreenUpdating = False
+    
+    '===== 1. 出力先ブック・シートの準備 =====
+    Set wbDst = ThisWorkbook
+    
+    ' 「本社_統合」シートがなければ作る
+    On Error Resume Next
+    Set wsDst = wbDst.Worksheets("本社_統合")
+    On Error GoTo ErrHandler
+    
+    If wsDst Is Nothing Then
+        Set wsDst = wbDst.Worksheets.Add(After:=wbDst.Sheets(wbDst.Sheets.Count))
+        wsDst.Name = "本社_統合"
+    End If
+    
+    wsDst.Cells.Clear
+    
+    ' 見出し行（1行目）
+    wsDst.Cells(1, 1).Value = "第1階層_部門コード"
+    wsDst.Cells(1, 2).Value = "第1階層_部門名称"
+    wsDst.Cells(1, 3).Value = "第2階層_部門コード"
+    wsDst.Cells(1, 4).Value = "第2階層_部門名称"
+    wsDst.Cells(1, 5).Value = "第3階層_部門コード"
+    wsDst.Cells(1, 6).Value = "第3階層_部門名称"
+    wsDst.Cells(1, 7).Value = "第4階層_部門コード"
+    wsDst.Cells(1, 8).Value = "第4階層_部門名称"
+    wsDst.Cells(1, 9).Value = "第5階層_部門コード"
+    wsDst.Cells(1, 10).Value = "第5階層_部門名称"
+    wsDst.Cells(1, 11).Value = "職位"
+    wsDst.Cells(1, 12).Value = "社員番号"
+    wsDst.Cells(1, 13).Value = "氏名"
+    
+    outRow = 2
+    
+    '===== 2. ファイル選択ダイアログ =====
+    fPath = Application.GetOpenFilename( _
+                FileFilter:="Excelファイル (*.xlsx;*.xlsm;*.xls),*.xlsx;*.xlsm;*.xls", _
+                Title:="本社シートのあるファイルを選択してください")
+    
+    If fPath = False Then
+        MsgBox "キャンセルされました。", vbInformation
+        GoTo ExitPoint
+    End If
+    
+    '===== 3. 選択ファイルを読み取り専用で開く =====
+    Set wbSrc = Workbooks.Open(Filename:=fPath, ReadOnly:=True)
+    
+    On Error Resume Next
+    Set wsSrc = wbSrc.Worksheets("本社")
+    On Error GoTo ErrHandler
+    
+    If wsSrc Is Nothing Then
+        MsgBox "選択したファイルに「本社」シートがありません。", vbExclamation
+        GoTo ExitPoint
+    End If
+    
+    '===== 4. 「第1階層〜第5階層」の位置を特定 =====
+    levelNames(1) = "第1階層"
+    levelNames(2) = "第2階層"
+    levelNames(3) = "第3階層"
+    levelNames(4) = "第4階層"
+    levelNames(5) = "第5階層"
+    
+    Dim c As Range
+    
+    For i = 1 To 5
+        Set c = wsSrc.Cells.Find(What:=levelNames(i), LookAt:=xlWhole)
+        If c Is Nothing Then
+            MsgBox levelNames(i) & " のセルが見つかりません。", vbExclamation
+            GoTo ExitPoint
+        End If
+        levelCol(i) = c.Column
+        If i = 1 Then
+            hierRow = c.Row
+        Else
+            ' 念のため、行がずれていたらエラー
+            If c.Row <> hierRow Then
+                MsgBox "第1〜第5階層のセルが同じ行にありません。", vbExclamation
+                GoTo ExitPoint
+            End If
+        End If
+    Next i
+    
+    headerRow = hierRow + 1
+    dataStartRow = headerRow + 1
+    
+    ' 最終行（職位/社員番号/氏名あたりの列を基準に探す方が安全）
+    lastRow = wsSrc.Cells(wsSrc.Rows.Count, levelCol(1) + 2).End(xlUp).Row
+    If lastRow < dataStartRow Then
+        MsgBox "データ行が見つかりません。", vbExclamation
+        GoTo ExitPoint
+    End If
+    
+    '===== 5. データ行ループ =====
+    For r = dataStartRow To lastRow
+        
+        activeLevel = 0
+        valTitle = ""
+        valEmpNo = ""
+        valEmpName = ""
+        
+        ' --- どの階層に職位・社員番号・氏名が入っているか探す ---
+        For lvl = 1 To 5
+            
+            colTitle = levelCol(lvl) + 2      ' 職位
+            colEmpNo = levelCol(lvl) + 3      ' 社員番号
+            colEmpName = levelCol(lvl) + 4    ' 氏名
+            
+            valTitle = Trim$(GetMergedText(wsSrc.Cells(r, colTitle)))
+            valEmpNo = Trim$(GetMergedText(wsSrc.Cells(r, colEmpNo)))
+            valEmpName = Trim$(GetMergedText(wsSrc.Cells(r, colEmpName)))
+            
+            If (valTitle <> "") Or (valEmpNo <> "") Or (valEmpName <> "") Then
+                activeLevel = lvl
+                Exit For
+            End If
+        Next lvl
+        
+        ' この行に有効な階層がなければスキップ
+        If activeLevel = 0 Then
+            GoTo NextRow
+        End If
+        
+        '===== 6. 左側の階層分の部門コード・部門名称を取得して出力 =====
+        For lvl = 1 To activeLevel
+            
+            colCode = levelCol(lvl)          ' 部門コード
+            colName = levelCol(lvl) + 1      ' 部門名称
+            
+            tmpCode = Trim$(GetMergedText(wsSrc.Cells(r, colCode)))
+            tmpName = Trim$(GetMergedText(wsSrc.Cells(r, colName)))
+            
+            ' 出力列: 第n階層は (2*(n-1)+1列目, 2*(n-1)+2列目)
+            wsDst.Cells(outRow, 2 * (lvl - 1) + 1).Value = tmpCode
+            wsDst.Cells(outRow, 2 * (lvl - 1) + 2).Value = tmpName
+            
+        Next lvl
+        
+        '===== 7. 職位・社員番号・氏名を11〜13列目に出力 =====
+        wsDst.Cells(outRow, 11).Value = valTitle
+        wsDst.Cells(outRow, 12).Value = valEmpNo
+        wsDst.Cells(outRow, 13).Value = valEmpName
+        
+        outRow = outRow + 1
+        
+NextRow:
+    Next r
+    
+    ' ちょっと整える
+    wsDst.Columns("A:M").EntireColumn.AutoFit
+    
+    MsgBox "本社階層表の統合出力が完了しました。" & vbCrLf & _
+           "出力シート: " & wsDst.Name, vbInformation
+
+ExitPoint:
+    On Error Resume Next
+    If Not wbSrc Is Nothing Then
+        wbSrc.Close SaveChanges:=False  ' 元ファイルは変更しない
+    End If
+    Application.ScreenUpdating = True
+    On Error GoTo 0
+    Exit Sub
+
+ErrHandler:
+    MsgBox "エラーが発生しました: " & Err.Number & vbCrLf & Err.Description, vbCritical
+    Resume ExitPoint
+
+End Sub
 
 
 
