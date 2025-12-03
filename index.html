@@ -38,9 +38,28 @@ Private Function GetMergedText(rng As Range) As String
 End Function
 
 
-' 本社シート（第1〜第5階層）の情報を統合形式に変換して
-' このブックの「本社_統合」シートに出力する
+' ===== 入口マクロ：今月→先月の順に処理する =====
 Public Sub 本社階層表_統合出力()
+
+    ' 今月情報
+    本社階層表_統合出力_1ファイル _
+        dstSheetName:="今月情報", _
+        dialogTitle:="【今月】本社シートのあるファイルを選択してください"
+    
+    ' 先月情報
+    本社階層表_統合出力_1ファイル _
+        dstSheetName:="先月情報", _
+        dialogTitle:="【先月】本社シートのあるファイルを選択してください"
+
+    MsgBox "今月情報・先月情報の出力が完了しました。", vbInformation
+
+End Sub
+
+
+' ===== 実処理：1ファイル分を指定シートに出力する =====
+Private Sub 本社階層表_統合出力_1ファイル( _
+        ByVal dstSheetName As String, _
+        ByVal dialogTitle As String)
 
     Dim fPath As Variant
     Dim wbSrc As Workbook
@@ -70,6 +89,10 @@ Public Sub 本社階層表_統合出力()
     Dim valTitle As String, valEmpNo As String, valEmpName As String
     Dim tmpCode As String, tmpName As String
     
+    Dim c As Range
+    Dim testCol As Long
+    Dim tmpLast As Long
+    
     On Error GoTo ErrHandler
     
     Application.ScreenUpdating = False
@@ -77,14 +100,14 @@ Public Sub 本社階層表_統合出力()
     '===== 1. 出力先ブック・シートの準備 =====
     Set wbDst = ThisWorkbook
     
-    ' 「本社_統合」シートがなければ作る
+    ' dstSheetName（今月情報 / 先月情報）がなければ作る
     On Error Resume Next
-    Set wsDst = wbDst.Worksheets("本社_統合")
+    Set wsDst = wbDst.Worksheets(dstSheetName)
     On Error GoTo ErrHandler
     
     If wsDst Is Nothing Then
         Set wsDst = wbDst.Worksheets.Add(After:=wbDst.Sheets(wbDst.Sheets.Count))
-        wsDst.Name = "本社_統合"
+        wsDst.Name = dstSheetName
     End If
     
     wsDst.Cells.Clear
@@ -109,10 +132,10 @@ Public Sub 本社階層表_統合出力()
     '===== 2. ファイル選択ダイアログ =====
     fPath = Application.GetOpenFilename( _
                 FileFilter:="Excelファイル (*.xlsx;*.xlsm;*.xls),*.xlsx;*.xlsm;*.xls", _
-                Title:="本社シートのあるファイルを選択してください")
+                Title:=dialogTitle)
     
     If fPath = False Then
-        MsgBox "キャンセルされました。", vbInformation
+        MsgBox "キャンセルされました。（" & dstSheetName & "）", vbInformation
         GoTo ExitPoint
     End If
     
@@ -124,7 +147,7 @@ Public Sub 本社階層表_統合出力()
     On Error GoTo ErrHandler
     
     If wsSrc Is Nothing Then
-        MsgBox "選択したファイルに「本社」シートがありません。", vbExclamation
+        MsgBox "選択したファイルに「本社」シートがありません。（" & dstSheetName & "）", vbExclamation
         GoTo ExitPoint
     End If
     
@@ -135,12 +158,10 @@ Public Sub 本社階層表_統合出力()
     levelNames(4) = "第4階層"
     levelNames(5) = "第5階層"
     
-    Dim c As Range
-    
     For i = 1 To 5
         Set c = wsSrc.Cells.Find(What:=levelNames(i), LookAt:=xlWhole)
         If c Is Nothing Then
-            MsgBox levelNames(i) & " のセルが見つかりません。", vbExclamation
+            MsgBox levelNames(i) & " のセルが見つかりません。（" & dstSheetName & "）", vbExclamation
             GoTo ExitPoint
         End If
         levelCol(i) = c.Column
@@ -149,7 +170,7 @@ Public Sub 本社階層表_統合出力()
         Else
             ' 念のため、行がずれていたらエラー
             If c.Row <> hierRow Then
-                MsgBox "第1〜第5階層のセルが同じ行にありません。", vbExclamation
+                MsgBox "第1〜第5階層のセルが同じ行にありません。（" & dstSheetName & "）", vbExclamation
                 GoTo ExitPoint
             End If
         End If
@@ -158,34 +179,31 @@ Public Sub 本社階層表_統合出力()
     headerRow = hierRow + 1
     dataStartRow = headerRow + 1
     
-'===== 最終行を「5階層 × 3項目」の中で最も深いところに合わせる =====
-Dim testCol As Long
-Dim tmpLast As Long
-lastRow = 0
-
-For i = 1 To 5
-    ' 職位
-    testCol = levelCol(i) + 2
-    tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
-    If tmpLast > lastRow Then lastRow = tmpLast
+    '===== 最終行を「5階層 × 3項目」の中で最も深いところに合わせる =====
+    lastRow = 0
     
-    ' 社員番号
-    testCol = levelCol(i) + 3
-    tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
-    If tmpLast > lastRow Then lastRow = tmpLast
+    For i = 1 To 5
+        ' 職位
+        testCol = levelCol(i) + 2
+        tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
+        If tmpLast > lastRow Then lastRow = tmpLast
+        
+        ' 社員番号
+        testCol = levelCol(i) + 3
+        tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
+        If tmpLast > lastRow Then lastRow = tmpLast
+        
+        ' 氏名
+        testCol = levelCol(i) + 4
+        tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
+        If tmpLast > lastRow Then lastRow = tmpLast
+    Next i
     
-    ' 氏名
-    testCol = levelCol(i) + 4
-    tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
-    If tmpLast > lastRow Then lastRow = tmpLast
-Next i
-
-' データ開始行より上ならエラー
-If lastRow < dataStartRow Then
-    MsgBox "データ行が見つかりません。", vbExclamation
-    GoTo ExitPoint
-End If
-
+    ' データ開始行より上ならエラー
+    If lastRow < dataStartRow Then
+        MsgBox "データ行が見つかりません。（" & dstSheetName & "）", vbExclamation
+        GoTo ExitPoint
+    End If
     
     '===== 5. データ行ループ =====
     For r = dataStartRow To lastRow
@@ -245,8 +263,7 @@ NextRow:
     ' ちょっと整える
     wsDst.Columns("A:M").EntireColumn.AutoFit
     
-    MsgBox "本社階層表の統合出力が完了しました。" & vbCrLf & _
-           "出力シート: " & wsDst.Name, vbInformation
+    MsgBox dstSheetName & " の出力が完了しました。", vbInformation
 
 ExitPoint:
     On Error Resume Next
@@ -258,7 +275,8 @@ ExitPoint:
     Exit Sub
 
 ErrHandler:
-    MsgBox "エラーが発生しました: " & Err.Number & vbCrLf & Err.Description, vbCritical
+    MsgBox "エラーが発生しました。（" & dstSheetName & "）" & vbCrLf & _
+           Err.Number & " : " & Err.Description, vbCritical
     Resume ExitPoint
 
 End Sub
