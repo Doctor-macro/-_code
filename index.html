@@ -158,12 +158,34 @@ Public Sub 本社階層表_統合出力()
     headerRow = hierRow + 1
     dataStartRow = headerRow + 1
     
-    ' 最終行（職位/社員番号/氏名あたりの列を基準に探す方が安全）
-    lastRow = wsSrc.Cells(wsSrc.Rows.Count, levelCol(1) + 2).End(xlUp).Row
-    If lastRow < dataStartRow Then
-        MsgBox "データ行が見つかりません。", vbExclamation
-        GoTo ExitPoint
-    End If
+'===== 最終行を「5階層 × 3項目」の中で最も深いところに合わせる =====
+Dim testCol As Long
+Dim tmpLast As Long
+lastRow = 0
+
+For i = 1 To 5
+    ' 職位
+    testCol = levelCol(i) + 2
+    tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
+    If tmpLast > lastRow Then lastRow = tmpLast
+    
+    ' 社員番号
+    testCol = levelCol(i) + 3
+    tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
+    If tmpLast > lastRow Then lastRow = tmpLast
+    
+    ' 氏名
+    testCol = levelCol(i) + 4
+    tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
+    If tmpLast > lastRow Then lastRow = tmpLast
+Next i
+
+' データ開始行より上ならエラー
+If lastRow < dataStartRow Then
+    MsgBox "データ行が見つかりません。", vbExclamation
+    GoTo ExitPoint
+End If
+
     
     '===== 5. データ行ループ =====
     For r = dataStartRow To lastRow
