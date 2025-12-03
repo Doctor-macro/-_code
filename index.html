@@ -17,11 +17,17 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+
+
+
+
+
+  
 Option Explicit
 
 ' 部門名称 5階層が変わったかどうか判定
+' ★ 今回は第3階層（営業部）・第4階層（営業課）だけを異動判定に使う
 Private Function DeptChanged(ByVal prevDept As Variant, ByVal curDept As Variant) As Boolean
-    Dim i As Long
     DeptChanged = False
     
     If IsEmpty(prevDept) Or IsEmpty(curDept) Then
@@ -29,17 +35,22 @@ Private Function DeptChanged(ByVal prevDept As Variant, ByVal curDept As Variant
         Exit Function
     End If
     
-    For i = 1 To 5
-        If CStr(prevDept(i)) <> CStr(curDept(i)) Then
-            DeptChanged = True
-            Exit Function
-        End If
-    Next i
+    ' 第3階層（営業部）
+    If CStr(prevDept(3)) <> CStr(curDept(3)) Then
+        DeptChanged = True
+        Exit Function
+    End If
+    
+    ' 第4階層（営業課）
+    If CStr(prevDept(4)) <> CStr(curDept(4)) Then
+        DeptChanged = True
+        Exit Function
+    End If
 End Function
 
 ' 今月情報 or 先月情報シートから
 ' 社員番号ごとの 部門名称(5階層)・職位・氏名 を辞書に格納
-' ★ A列が「丸亀製麺」以外の行は読み飛ばす
+' ★ 1列目が「丸亀製麺」以外の行は読み飛ばす
 Private Sub LoadMonthData( _
         ByVal ws As Worksheet, _
         ByRef dictDept As Object, _
@@ -71,7 +82,7 @@ Private Sub LoadMonthData( _
         empNo = Trim$(CStr(ws.Cells(r, 13).Value)) ' ★ 社員番号（13列目）
         
         If empNo <> "" Then
-            ' ★ 部門名称（C,E,G,I,K → 3,5,7,9,11列）
+            ' ★ 部門名称（3,5,7,9,11列）＝ 第1〜第5階層
             arrDept(1) = CStr(ws.Cells(r, 3).Value)   ' 第1階層_部門名称
             arrDept(2) = CStr(ws.Cells(r, 5).Value)   ' 第2階層_部門名称
             arrDept(3) = CStr(ws.Cells(r, 7).Value)   ' 第3階層_部門名称
@@ -143,38 +154,34 @@ Public Sub 入退職者_異動情報_作成()
         wsInOut.Name = "入退職者情報"
         
         With wsInOut
-            ' 見出し（1行目）
+            ' 見出し（1行目）…8列分はそのまま結合しておく
             .Range("A1:H1").Merge
             .Range("A1").Value = "新規入職者"
             .Range("J1:Q1").Merge
             .Range("J1").Value = "退職者"
             
             ' 2行目 見出し（新規入職者側）
-            .Range("A2").Value = "第1階層_部門名称"
-            .Range("B2").Value = "第2階層_部門名称"
-            .Range("C2").Value = "第3階層_部門名称"
-            .Range("D2").Value = "第4階層_部門名称"
-            .Range("E2").Value = "第5階層_部門名称"
-            .Range("F2").Value = "職位"
-            .Range("G2").Value = "社員番号"
-            .Range("H2").Value = "氏名"
+            .Range("A2").Value = "営業部"     ' 第3階層
+            .Range("B2").Value = "営業課"     ' 第4階層
+            .Range("C2").Value = "職位"
+            .Range("D2").Value = "社員番号"
+            .Range("E2").Value = "氏名"
+            ' F〜H列は使わない（空のままでもOK）
             
             ' 2行目 見出し（退職者側）
-            .Range("J2").Value = "第1階層_部門名称"
-            .Range("K2").Value = "第2階層_部門名称"
-            .Range("L2").Value = "第3階層_部門名称"
-            .Range("M2").Value = "第4階層_部門名称"
-            .Range("N2").Value = "第5階層_部門名称"
-            .Range("O2").Value = "職位"
-            .Range("P2").Value = "社員番号"
-            .Range("Q2").Value = "氏名"
+            .Range("J2").Value = "営業部"     ' 第3階層
+            .Range("K2").Value = "営業課"     ' 第4階層
+            .Range("L2").Value = "職位"
+            .Range("M2").Value = "社員番号"
+            .Range("N2").Value = "氏名"
+            ' O〜Q列は使わない（空のままでもOK）
         End With
         
     Else
         ' ★2回目以降はデータ行だけ消す（3行目以降）
         With wsInOut
-            .Range("A3:H" & .Rows.Count).ClearContents
-            .Range("J3:Q" & .Rows.Count).ClearContents
+            .Range("A3:E" & .Rows.Count).ClearContents
+            .Range("J3:N" & .Rows.Count).ClearContents
         End With
     End If
     
@@ -188,14 +195,11 @@ Public Sub 入退職者_異動情報_作成()
         If Not dictPrevDept.Exists(empNo) Then
             arrDeptCur = dictCurDept(empNo)
             With wsInOut
-                .Cells(rowNew, 1).Value = arrDeptCur(1)
-                .Cells(rowNew, 2).Value = arrDeptCur(2)
-                .Cells(rowNew, 3).Value = arrDeptCur(3)
-                .Cells(rowNew, 4).Value = arrDeptCur(4)
-                .Cells(rowNew, 5).Value = arrDeptCur(5)
-                .Cells(rowNew, 6).Value = dictCurTitle(empNo)
-                .Cells(rowNew, 7).Value = empNo
-                .Cells(rowNew, 8).Value = dictCurName(empNo)
+                .Cells(rowNew, 1).Value = arrDeptCur(3)    ' 営業部（第3階層）
+                .Cells(rowNew, 2).Value = arrDeptCur(4)    ' 営業課（第4階層）
+                .Cells(rowNew, 3).Value = dictCurTitle(empNo)
+                .Cells(rowNew, 4).Value = empNo
+                .Cells(rowNew, 5).Value = dictCurName(empNo)
             End With
             rowNew = rowNew + 1
         End If
@@ -208,14 +212,11 @@ Public Sub 入退職者_異動情報_作成()
         If Not dictCurDept.Exists(empNo) Then
             arrDeptPrev = dictPrevDept(empNo)
             With wsInOut
-                .Cells(rowLeave, 10).Value = arrDeptPrev(1) ' J列
-                .Cells(rowLeave, 11).Value = arrDeptPrev(2)
-                .Cells(rowLeave, 12).Value = arrDeptPrev(3)
-                .Cells(rowLeave, 13).Value = arrDeptPrev(4)
-                .Cells(rowLeave, 14).Value = arrDeptPrev(5)
-                .Cells(rowLeave, 15).Value = dictPrevTitle(empNo)
-                .Cells(rowLeave, 16).Value = empNo
-                .Cells(rowLeave, 17).Value = dictPrevName(empNo)
+                .Cells(rowLeave, 10).Value = arrDeptPrev(3) ' 営業部
+                .Cells(rowLeave, 11).Value = arrDeptPrev(4) ' 営業課
+                .Cells(rowLeave, 12).Value = dictPrevTitle(empNo)
+                .Cells(rowLeave, 13).Value = empNo
+                .Cells(rowLeave, 14).Value = dictPrevName(empNo)
             End With
             rowLeave = rowLeave + 1
         End If
@@ -237,42 +238,34 @@ Public Sub 入退職者_異動情報_作成()
         
         With wsMove
             ' 1行目 見出し（大見出し）
-            .Range("A1:E1").Merge
+            .Range("A1:B1").Merge
             .Range("A1").Value = "先月所属"
-            .Range("F1:J1").Merge
-            .Range("F1").Value = "今月所属"
-            .Range("K1").Value = "職位"
-            .Range("L1").Value = "社員番号"
-            .Range("M1").Value = "氏名"
+            .Range("C1:D1").Merge
+            .Range("C1").Value = "今月所属"
+            .Range("E1").Value = "職位"
+            .Range("F1").Value = "社員番号"
+            .Range("G1").Value = "氏名"
             
             ' 2行目 細かい見出し
-            .Range("A2").Value = "第1階層_部門名称"
-            .Range("B2").Value = "第2階層_部門名称"
-            .Range("C2").Value = "第3階層_部門名称"
-            .Range("D2").Value = "第4階層_部門名称"
-            .Range("E2").Value = "第5階層_部門名称"
-            
-            .Range("F2").Value = "第1階層_部門名称"
-            .Range("G2").Value = "第2階層_部門名称"
-            .Range("H2").Value = "第3階層_部門名称"
-            .Range("I2").Value = "第4階層_部門名称"
-            .Range("J2").Value = "第5階層_部門名称"
-            
-            .Range("K2").Value = "職位"
-            .Range("L2").Value = "社員番号"
-            .Range("M2").Value = "氏名"
+            .Range("A2").Value = "営業部"    ' 先月 第3階層
+            .Range("B2").Value = "営業課"    ' 先月 第4階層
+            .Range("C2").Value = "営業部"    ' 今月 第3階層
+            .Range("D2").Value = "営業課"    ' 今月 第4階層
+            .Range("E2").Value = "職位"
+            .Range("F2").Value = "社員番号"
+            .Range("G2").Value = "氏名"
         End With
         
     Else
         ' ★2回目以降はデータ行だけ消す（3行目以降）
         With wsMove
-            .Range("A3:M" & .Rows.Count).ClearContents
+            .Range("A3:G" & .Rows.Count).ClearContents
         End With
     End If
     
     rowMove = 3
     
-    '----- 異動者（両方にいるが部門名称が変わった人） -----
+    '----- 異動者（両方にいるが 営業部/営業課 が変わった人） -----
     keys = dictCurDept.Keys
     For i = LBound(keys) To UBound(keys)
         empNo = CStr(keys(i))
@@ -282,29 +275,23 @@ Public Sub 入退職者_異動情報_作成()
             
             If DeptChanged(arrDeptPrev, arrDeptCur) Then
                 With wsMove
-                    ' 先月所属
-                    .Cells(rowMove, 1).Value = arrDeptPrev(1)
-                    .Cells(rowMove, 2).Value = arrDeptPrev(2)
-                    .Cells(rowMove, 3).Value = arrDeptPrev(3)
-                    .Cells(rowMove, 4).Value = arrDeptPrev(4)
-                    .Cells(rowMove, 5).Value = arrDeptPrev(5)
-                    ' 今月所属
-                    .Cells(rowMove, 6).Value = arrDeptCur(1)
-                    .Cells(rowMove, 7).Value = arrDeptCur(2)
-                    .Cells(rowMove, 8).Value = arrDeptCur(3)
-                    .Cells(rowMove, 9).Value = arrDeptCur(4)
-                    .Cells(rowMove, 10).Value = arrDeptCur(5)
+                    ' 先月所属（営業部・営業課）
+                    .Cells(rowMove, 1).Value = arrDeptPrev(3)
+                    .Cells(rowMove, 2).Value = arrDeptPrev(4)
+                    ' 今月所属（営業部・営業課）
+                    .Cells(rowMove, 3).Value = arrDeptCur(3)
+                    .Cells(rowMove, 4).Value = arrDeptCur(4)
                     ' 本人情報（今月の情報を採用）
-                    .Cells(rowMove, 11).Value = dictCurTitle(empNo)
-                    .Cells(rowMove, 12).Value = empNo
-                    .Cells(rowMove, 13).Value = dictCurName(empNo)
+                    .Cells(rowMove, 5).Value = dictCurTitle(empNo)
+                    .Cells(rowMove, 6).Value = empNo
+                    .Cells(rowMove, 7).Value = dictCurName(empNo)
                 End With
                 rowMove = rowMove + 1
             End If
         End If
     Next i
     
-    wsMove.Columns("A:M").EntireColumn.AutoFit
+    wsMove.Columns("A:G").EntireColumn.AutoFit
     
     MsgBox "「入退職者情報」「異動情報」の作成が完了しました。", vbInformation
 
