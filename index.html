@@ -17,221 +17,307 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+Option Explicit
 
-
-
-
-
-
-  
-  
-Private Sub 本社階層表_統合出力_1ファイル( _
-        ByVal dstSheetName As String, _
-        ByVal dialogTitle As String)
-
-    Dim fPath As Variant
-    Dim wbSrc As Workbook
-    Dim wsSrc As Worksheet
+' 部門名称 5階層が変わったかどうか判定
+Private Function DeptChanged(ByVal prevDept As Variant, ByVal curDept As Variant) As Boolean
+    Dim i As Long
+    DeptChanged = False
     
-    Dim wbDst As Workbook
-    Dim wsDst As Worksheet
+    If IsEmpty(prevDept) Or IsEmpty(curDept) Then
+        DeptChanged = True
+        Exit Function
+    End If
     
-    Dim levelNames(1 To 5) As String
-    Dim levelCol(1 To 5) As Long
+    For i = 1 To 5
+        If CStr(prevDept(i)) <> CStr(curDept(i)) Then
+            DeptChanged = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+' 今月情報 or 先月情報シートから
+' 社員番号ごとの 部門名称(5階層)・職位・氏名 を辞書に格納
+' ★ A列が「丸亀製麺」以外の行は読み飛ばす
+Private Sub LoadMonthData( _
+        ByVal ws As Worksheet, _
+        ByRef dictDept As Object, _
+        ByRef dictTitle As Object, _
+        ByRef dictName As Object)
+    
+    Dim lastRow As Long
+    Dim r As Long
+    Dim empNo As String
+    Dim arrDept(1 To 5) As Variant
+    Dim company As String
+    
+    Set dictDept = CreateObject("Scripting.Dictionary")
+    Set dictTitle = CreateObject("Scripting.Dictionary")
+    Set dictName = CreateObject("Scripting.Dictionary")
+    
+    ' ★ 社員番号の列（13列目）で最終行を判定
+    lastRow = ws.Cells(ws.Rows.Count, 13).End(xlUp).Row
+    If lastRow < 3 Then Exit Sub   ' データ無し
+    
+    For r = 3 To lastRow
+        
+        ' ★ 1列目が「丸亀製麺」以外ならスキップ
+        company = CStr(ws.Cells(r, 1).Value)
+        If company <> "丸亀製麺" Then
+            GoTo NextRow
+        End If
+        
+        empNo = Trim$(CStr(ws.Cells(r, 13).Value)) ' ★ 社員番号（13列目）
+        
+        If empNo <> "" Then
+            ' ★ 部門名称（C,E,G,I,K → 3,5,7,9,11列）
+            arrDept(1) = CStr(ws.Cells(r, 3).Value)   ' 第1階層_部門名称
+            arrDept(2) = CStr(ws.Cells(r, 5).Value)   ' 第2階層_部門名称
+            arrDept(3) = CStr(ws.Cells(r, 7).Value)   ' 第3階層_部門名称
+            arrDept(4) = CStr(ws.Cells(r, 9).Value)   ' 第4階層_部門名称
+            arrDept(5) = CStr(ws.Cells(r, 11).Value)  ' 第5階層_部門名称
+            
+            dictDept(empNo) = arrDept
+            dictTitle(empNo) = CStr(ws.Cells(r, 12).Value) ' ★ 職位（12列目）
+            dictName(empNo) = CStr(ws.Cells(r, 14).Value)  ' ★ 氏名（14列目）
+        End If
+        
+NextRow:
+    Next r
+End Sub
+
+' メイン：入退職者情報 ＋ 異動情報 を作成
+Public Sub 入退職者_異動情報_作成()
+
+    Dim wb As Workbook
+    Dim wsCur As Worksheet  ' 今月情報
+    Dim wsPrev As Worksheet ' 先月情報
+    Dim wsInOut As Worksheet ' 入退職者情報
+    Dim wsMove As Worksheet  ' 異動情報
+    
+    Dim dictCurDept As Object, dictCurTitle As Object, dictCurName As Object
+    Dim dictPrevDept As Object, dictPrevTitle As Object, dictPrevName As Object
+    
+    Dim keys As Variant
+    Dim empNo As String
+    Dim arrDeptCur As Variant, arrDeptPrev As Variant
     Dim i As Long
     
-    Dim hierRow As Long
-    Dim headerRow As Long
-    Dim dataStartRow As Long
-    Dim lastRow As Long
-    
-    Dim r As Long
-    Dim outRow As Long
-    
-    Dim lvl As Long
-    Dim activeLevel As Long
-    
-    Dim colCode As Long, colName As Long
-    Dim colTitle As Long, colEmpNo As Long, colEmpName As Long
-    
-    Dim c As Range
-    Dim testCol As Long
-    Dim tmpLast As Long
-    Dim valTitle As String, valEmpNo As String, valEmpName As String
-    Dim tmpCode As String, tmpName As String
-    Dim valD As String   ' 本社シートD列
+    Dim rowNew As Long, rowLeave As Long, rowMove As Long
     
     On Error GoTo ErrHandler
     Application.ScreenUpdating = False
     
-    '===== 出力先ブック・シートの準備 =====
-    Set wbDst = ThisWorkbook
+    Set wb = ThisWorkbook
+    
+    '----- 今月情報・先月情報 シート取得 -----
     On Error Resume Next
-    Set wsDst = wbDst.Worksheets(dstSheetName)
+    Set wsCur = wb.Worksheets("今月情報")
+    Set wsPrev = wb.Worksheets("先月情報")
     On Error GoTo ErrHandler
     
-    If wsDst Is Nothing Then
-        Set wsDst = wbDst.Worksheets.Add(After:=wbDst.Sheets(wbDst.Sheets.Count))
-        wsDst.Name = dstSheetName
+    If wsCur Is Nothing Then
+        MsgBox "「今月情報」シートが見つかりません。", vbExclamation
+        GoTo ExitPoint
     End If
-    
-    '===== ファイル選択 =====
-    fPath = Application.GetOpenFilename( _
-                FileFilter:="Excelファイル (*.xlsx;*.xlsm;*.xls),*.xlsx;*.xlsm;*.xls", _
-                Title:=dialogTitle)
-    
-    If fPath = False Then
-        MsgBox "キャンセルされました。（" & dstSheetName & "）", vbInformation
+    If wsPrev Is Nothing Then
+        MsgBox "「先月情報」シートが見つかりません。", vbExclamation
         GoTo ExitPoint
     End If
     
-    '===== 本社シートを開く =====
-    Set wbSrc = Workbooks.Open(Filename:=fPath, ReadOnly:=True)
-    
+    '----- データ読み込み（★ここで丸亀製麺だけに絞られる） -----
+    LoadMonthData wsCur, dictCurDept, dictCurTitle, dictCurName
+    LoadMonthData wsPrev, dictPrevDept, dictPrevTitle, dictPrevName
+          
+    '===============================
+    '   入退職者情報 シートの作成
+    '===============================
     On Error Resume Next
-    Set wsSrc = wbSrc.Worksheets("本社")
+    Set wsInOut = wb.Worksheets("入退職者情報")
     On Error GoTo ErrHandler
     
-    If wsSrc Is Nothing Then
-        MsgBox "選択したファイルに「本社」シートがありません。（" & dstSheetName & "）", vbExclamation
-        GoTo ExitPoint
+    If wsInOut Is Nothing Then
+        ' ★初回だけシート作成＆見出し・結合を設定
+        Set wsInOut = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+        wsInOut.Name = "入退職者情報"
+        
+        With wsInOut
+            ' 見出し（1行目）
+            .Range("A1:H1").Merge
+            .Range("A1").Value = "新規入職者"
+            .Range("J1:Q1").Merge
+            .Range("J1").Value = "退職者"
+            
+            ' 2行目 見出し（新規入職者側）
+            .Range("A2").Value = "第1階層_部門名称"
+            .Range("B2").Value = "第2階層_部門名称"
+            .Range("C2").Value = "第3階層_部門名称"
+            .Range("D2").Value = "第4階層_部門名称"
+            .Range("E2").Value = "第5階層_部門名称"
+            .Range("F2").Value = "職位"
+            .Range("G2").Value = "社員番号"
+            .Range("H2").Value = "氏名"
+            
+            ' 2行目 見出し（退職者側）
+            .Range("J2").Value = "第1階層_部門名称"
+            .Range("K2").Value = "第2階層_部門名称"
+            .Range("L2").Value = "第3階層_部門名称"
+            .Range("M2").Value = "第4階層_部門名称"
+            .Range("N2").Value = "第5階層_部門名称"
+            .Range("O2").Value = "職位"
+            .Range("P2").Value = "社員番号"
+            .Range("Q2").Value = "氏名"
+        End With
+        
+    Else
+        ' ★2回目以降はデータ行だけ消す（3行目以降）
+        With wsInOut
+            .Range("A3:H" & .Rows.Count).ClearContents
+            .Range("J3:Q" & .Rows.Count).ClearContents
+        End With
     End If
     
-    '===== 第1〜第5階層の位置を特定 =====
-    levelNames(1) = "第1階層"
-    levelNames(2) = "第2階層"
-    levelNames(3) = "第3階層"
-    levelNames(4) = "第4階層"
-    levelNames(5) = "第5階層"
-    
-    For i = 1 To 5
-        Set c = wsSrc.Cells.Find(What:=levelNames(i), LookAt:=xlWhole)
-        If c Is Nothing Then
-            MsgBox levelNames(i) & " のセルが見つかりません。（" & dstSheetName & "）", vbExclamation
-            GoTo ExitPoint
-        End If
-        levelCol(i) = c.Column
-        If i = 1 Then
-            hierRow = c.Row
-        ElseIf c.Row <> hierRow Then
-            MsgBox "第1〜第5階層のセルが同じ行にありません。（" & dstSheetName & "）", vbExclamation
-            GoTo ExitPoint
+    rowNew = 3
+    rowLeave = 3
+
+    '----- 新規入職者（今月にいて先月にいない） -----
+    keys = dictCurDept.Keys
+    For i = LBound(keys) To UBound(keys)
+        empNo = CStr(keys(i))
+        If Not dictPrevDept.Exists(empNo) Then
+            arrDeptCur = dictCurDept(empNo)
+            With wsInOut
+                .Cells(rowNew, 1).Value = arrDeptCur(1)
+                .Cells(rowNew, 2).Value = arrDeptCur(2)
+                .Cells(rowNew, 3).Value = arrDeptCur(3)
+                .Cells(rowNew, 4).Value = arrDeptCur(4)
+                .Cells(rowNew, 5).Value = arrDeptCur(5)
+                .Cells(rowNew, 6).Value = dictCurTitle(empNo)
+                .Cells(rowNew, 7).Value = empNo
+                .Cells(rowNew, 8).Value = dictCurName(empNo)
+            End With
+            rowNew = rowNew + 1
         End If
     Next i
     
-    headerRow = hierRow + 1
-    dataStartRow = headerRow + 1
-    
-    '===== 最終行判定 =====
-    lastRow = 0
-    For i = 1 To 5
-        testCol = levelCol(i) + 2   ' 職位
-        tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
-        If tmpLast > lastRow Then lastRow = tmpLast
-        
-        testCol = levelCol(i) + 3   ' 社員番号
-        tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
-        If tmpLast > lastRow Then lastRow = tmpLast
-        
-        testCol = levelCol(i) + 4   ' 氏名
-        tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
-        If tmpLast > lastRow Then lastRow = tmpLast
+    '----- 退職者（先月にいて今月にいない） -----
+    keys = dictPrevDept.Keys
+    For i = LBound(keys) To UBound(keys)
+        empNo = CStr(keys(i))
+        If Not dictCurDept.Exists(empNo) Then
+            arrDeptPrev = dictPrevDept(empNo)
+            With wsInOut
+                .Cells(rowLeave, 10).Value = arrDeptPrev(1) ' J列
+                .Cells(rowLeave, 11).Value = arrDeptPrev(2)
+                .Cells(rowLeave, 12).Value = arrDeptPrev(3)
+                .Cells(rowLeave, 13).Value = arrDeptPrev(4)
+                .Cells(rowLeave, 14).Value = arrDeptPrev(5)
+                .Cells(rowLeave, 15).Value = dictPrevTitle(empNo)
+                .Cells(rowLeave, 16).Value = empNo
+                .Cells(rowLeave, 17).Value = dictPrevName(empNo)
+            End With
+            rowLeave = rowLeave + 1
+        End If
     Next i
     
-    If lastRow < dataStartRow Then
-        MsgBox "データ行が見つかりません。（" & dstSheetName & "）", vbExclamation
-        GoTo ExitPoint
+    wsInOut.Columns("A:Q").EntireColumn.AutoFit
+    
+    '===============================
+    '        異動情報 シート
+    '===============================
+    On Error Resume Next
+    Set wsMove = wb.Worksheets("異動情報")
+    On Error GoTo ErrHandler
+    
+    If wsMove Is Nothing Then
+        ' ★初回だけシート作成＆見出し・結合を設定
+        Set wsMove = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+        wsMove.Name = "異動情報"
+        
+        With wsMove
+            ' 1行目 見出し（大見出し）
+            .Range("A1:E1").Merge
+            .Range("A1").Value = "先月所属"
+            .Range("F1:J1").Merge
+            .Range("F1").Value = "今月所属"
+            .Range("K1").Value = "職位"
+            .Range("L1").Value = "社員番号"
+            .Range("M1").Value = "氏名"
+            
+            ' 2行目 細かい見出し
+            .Range("A2").Value = "第1階層_部門名称"
+            .Range("B2").Value = "第2階層_部門名称"
+            .Range("C2").Value = "第3階層_部門名称"
+            .Range("D2").Value = "第4階層_部門名称"
+            .Range("E2").Value = "第5階層_部門名称"
+            
+            .Range("F2").Value = "第1階層_部門名称"
+            .Range("G2").Value = "第2階層_部門名称"
+            .Range("H2").Value = "第3階層_部門名称"
+            .Range("I2").Value = "第4階層_部門名称"
+            .Range("J2").Value = "第5階層_部門名称"
+            
+            .Range("K2").Value = "職位"
+            .Range("L2").Value = "社員番号"
+            .Range("M2").Value = "氏名"
+        End With
+        
+    Else
+        ' ★2回目以降はデータ行だけ消す（3行目以降）
+        With wsMove
+            .Range("A3:M" & .Rows.Count).ClearContents
+        End With
     End If
     
-    '===== ここで初めて出力シートをクリア＆ヘッダ設定 =====
-    wsDst.Cells.Clear
+    rowMove = 3
     
-    wsDst.Cells(1, 1).Value = "D列情報"
-    wsDst.Cells(1, 2).Value = "第1階層_部門コード"
-    wsDst.Cells(1, 3).Value = "第1階層_部門名称"
-    wsDst.Cells(1, 4).Value = "第2階層_部門コード"
-    wsDst.Cells(1, 5).Value = "第2階層_部門名称"
-    wsDst.Cells(1, 6).Value = "第3階層_部門コード"
-    wsDst.Cells(1, 7).Value = "第3階層_部門名称"
-    wsDst.Cells(1, 8).Value = "第4階層_部門コード"
-    wsDst.Cells(1, 9).Value = "第4階層_部門名称"
-    wsDst.Cells(1, 10).Value = "第5階層_部門コード"
-    wsDst.Cells(1, 11).Value = "第5階層_部門名称"
-    wsDst.Cells(1, 12).Value = "職位"
-    wsDst.Cells(1, 13).Value = "社員番号"
-    wsDst.Cells(1, 14).Value = "氏名"
-    
-    outRow = 2
-    
-    '===== データ行ループ =====
-    For r = dataStartRow To lastRow
-        
-        activeLevel = 0
-        valTitle = ""
-        valEmpNo = ""
-        valEmpName = ""
-        valD = Trim$(GetMergedText(wsSrc.Cells(r, "D")))  ' 本社D列
-        
-        ' どの階層に職位・社員番号・氏名がいるか
-        For lvl = 1 To 5
+    '----- 異動者（両方にいるが部門名称が変わった人） -----
+    keys = dictCurDept.Keys
+    For i = LBound(keys) To UBound(keys)
+        empNo = CStr(keys(i))
+        If dictPrevDept.Exists(empNo) Then
+            arrDeptCur = dictCurDept(empNo)
+            arrDeptPrev = dictPrevDept(empNo)
             
-            colTitle = levelCol(lvl) + 2      ' 職位
-            colEmpNo = levelCol(lvl) + 3      ' 社員番号
-            colEmpName = levelCol(lvl) + 4    ' 氏名
-            
-            valTitle = Trim$(GetMergedText(wsSrc.Cells(r, colTitle)))
-            valEmpNo = Trim$(GetMergedText(wsSrc.Cells(r, colEmpNo)))
-            valEmpName = Trim$(GetMergedText(wsSrc.Cells(r, colEmpName)))
-            
-            If (valTitle <> "") Or (valEmpNo <> "") Or (valEmpName <> "") Then
-                activeLevel = lvl
-                Exit For
+            If DeptChanged(arrDeptPrev, arrDeptCur) Then
+                With wsMove
+                    ' 先月所属
+                    .Cells(rowMove, 1).Value = arrDeptPrev(1)
+                    .Cells(rowMove, 2).Value = arrDeptPrev(2)
+                    .Cells(rowMove, 3).Value = arrDeptPrev(3)
+                    .Cells(rowMove, 4).Value = arrDeptPrev(4)
+                    .Cells(rowMove, 5).Value = arrDeptPrev(5)
+                    ' 今月所属
+                    .Cells(rowMove, 6).Value = arrDeptCur(1)
+                    .Cells(rowMove, 7).Value = arrDeptCur(2)
+                    .Cells(rowMove, 8).Value = arrDeptCur(3)
+                    .Cells(rowMove, 9).Value = arrDeptCur(4)
+                    .Cells(rowMove, 10).Value = arrDeptCur(5)
+                    ' 本人情報（今月の情報を採用）
+                    .Cells(rowMove, 11).Value = dictCurTitle(empNo)
+                    .Cells(rowMove, 12).Value = empNo
+                    .Cells(rowMove, 13).Value = dictCurName(empNo)
+                End With
+                rowMove = rowMove + 1
             End If
-        Next lvl
-        
-        If activeLevel = 0 Then GoTo NextRow
-        
-        ' D列情報
-        wsDst.Cells(outRow, 1).Value = valD
-        
-        ' 部門コード・名称（階層1〜activeLevel）
-        For lvl = 1 To activeLevel
-            colCode = levelCol(lvl)
-            colName = levelCol(lvl) + 1
-            
-            tmpCode = Trim$(GetMergedText(wsSrc.Cells(r, colCode)))
-            tmpName = Trim$(GetMergedText(wsSrc.Cells(r, colName)))
-            
-            wsDst.Cells(outRow, 2 * (lvl - 1) + 2).Value = tmpCode
-            wsDst.Cells(outRow, 2 * (lvl - 1) + 3).Value = tmpName
-        Next lvl
-        
-        ' 職位・社員番号・氏名
-        wsDst.Cells(outRow, 12).Value = valTitle
-        wsDst.Cells(outRow, 13).Value = valEmpNo
-        wsDst.Cells(outRow, 14).Value = valEmpName
-        
-        outRow = outRow + 1
-        
-NextRow:
-    Next r
+        End If
+    Next i
     
-    wsDst.Columns("A:N").EntireColumn.AutoFit
-    MsgBox dstSheetName & " の出力が完了しました。", vbInformation
+    wsMove.Columns("A:M").EntireColumn.AutoFit
+    
+    MsgBox "「入退職者情報」「異動情報」の作成が完了しました。", vbInformation
 
 ExitPoint:
-    On Error Resume Next
-    If Not wbSrc Is Nothing Then wbSrc.Close SaveChanges:=False
     Application.ScreenUpdating = True
     On Error GoTo 0
     Exit Sub
 
 ErrHandler:
-    MsgBox "エラーが発生しました。（" & dstSheetName & "）" & vbCrLf & _
+    MsgBox "エラーが発生しました。" & vbCrLf & _
            Err.Number & " : " & Err.Description, vbCritical
     Resume ExitPoint
 End Sub
-
 
                           
 </code></pre>
