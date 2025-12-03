@@ -16,13 +16,6 @@
 <body>
 <h2>VBA Code</h2>
 <pre><code>
-
-
-
-
-
-
-  
 Option Explicit
 
 ' 部門名称 5階層が変わったかどうか判定
@@ -217,7 +210,6 @@ Public Sub 入退職者_異動情報_作成()
         End If
     Next i
     
-    wsInOut.Columns("A:Q").EntireColumn.AutoFit
     
     '===============================
     '        異動情報 シート
@@ -299,7 +291,6 @@ Public Sub 入退職者_異動情報_作成()
         End If
     Next i
     
-    wsMove.Columns("A:M").EntireColumn.AutoFit
     
     MsgBox "「入退職者情報」「異動情報」の作成が完了しました。", vbInformation
 
