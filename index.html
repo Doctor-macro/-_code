@@ -17,46 +17,14 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+
+
+
+
+
+
   
-Option Explicit
-
-' 結合セルを含めて、そのセルが属する結合ブロックの左上セルの文字列を返す
-Private Function GetMergedText(rng As Range) As String
-    Dim tmp As Range
-    
-    If rng Is Nothing Then
-        GetMergedText = ""
-        Exit Function
-    End If
-    
-    If rng.MergeCells Then
-        Set tmp = rng.MergeArea.Cells(1, 1) ' 結合範囲の左上
-        GetMergedText = CStr(tmp.Value)
-    Else
-        GetMergedText = CStr(rng.Value)
-    End If
-End Function
-
-
-' ===== 入口マクロ：今月→先月の順に処理する =====
-Public Sub 本社階層表_統合出力()
-
-    ' 今月情報
-    本社階層表_統合出力_1ファイル _
-        dstSheetName:="今月情報", _
-        dialogTitle:="【今月】本社シートのあるファイルを選択してください"
-    
-    ' 先月情報
-    本社階層表_統合出力_1ファイル _
-        dstSheetName:="先月情報", _
-        dialogTitle:="【先月】本社シートのあるファイルを選択してください"
-
-    MsgBox "今月情報・先月情報の出力が完了しました。", vbInformation
-
-End Sub
-
-
-' ===== 実処理：1ファイル分を指定シートに出力する =====
+  
 Private Sub 本社階層表_統合出力_1ファイル( _
         ByVal dstSheetName As String, _
         ByVal dialogTitle As String)
@@ -72,9 +40,9 @@ Private Sub 本社階層表_統合出力_1ファイル( _
     Dim levelCol(1 To 5) As Long
     Dim i As Long
     
-    Dim hierRow As Long          ' 「第1階層〜第5階層」が並んでいる行
-    Dim headerRow As Long        ' 「部門コード」「部門名称」「職位」… の見出し行
-    Dim dataStartRow As Long     ' データ開始行
+    Dim hierRow As Long
+    Dim headerRow As Long
+    Dim dataStartRow As Long
     Dim lastRow As Long
     
     Dim r As Long
@@ -85,23 +53,19 @@ Private Sub 本社階層表_統合出力_1ファイル( _
     
     Dim colCode As Long, colName As Long
     Dim colTitle As Long, colEmpNo As Long, colEmpName As Long
-
     
     Dim c As Range
     Dim testCol As Long
     Dim tmpLast As Long
     Dim valTitle As String, valEmpNo As String, valEmpName As String
     Dim tmpCode As String, tmpName As String
-    Dim valD As String   ' ★ 元ファイルD列の情報用
-
-    On Error GoTo ErrHandler
+    Dim valD As String   ' 本社シートD列
     
+    On Error GoTo ErrHandler
     Application.ScreenUpdating = False
     
-    '===== 1. 出力先ブック・シートの準備 =====
+    '===== 出力先ブック・シートの準備 =====
     Set wbDst = ThisWorkbook
-    
-    ' dstSheetName（今月情報 / 先月情報）がなければ作る
     On Error Resume Next
     Set wsDst = wbDst.Worksheets(dstSheetName)
     On Error GoTo ErrHandler
@@ -111,28 +75,7 @@ Private Sub 本社階層表_統合出力_1ファイル( _
         wsDst.Name = dstSheetName
     End If
     
-    wsDst.Cells.Clear
-    
-    ' 見出し行（1行目）
-    wsDst.Cells(1, 1).Value = "D列情報"   ' ★ 追加（必要なら名前変えてOK）
-    wsDst.Cells(1, 2).Value = "第1階層_部門コード"
-    wsDst.Cells(1, 3).Value = "第1階層_部門名称"
-    wsDst.Cells(1, 4).Value = "第2階層_部門コード"
-    wsDst.Cells(1, 5).Value = "第2階層_部門名称"
-    wsDst.Cells(1, 6).Value = "第3階層_部門コード"
-    wsDst.Cells(1, 7).Value = "第3階層_部門名称"
-    wsDst.Cells(1, 8).Value = "第4階層_部門コード"
-    wsDst.Cells(1, 9).Value = "第4階層_部門名称"
-    wsDst.Cells(1, 10).Value = "第5階層_部門コード"
-    wsDst.Cells(1, 11).Value = "第5階層_部門名称"
-    wsDst.Cells(1, 12).Value = "職位"      ' ★ 1つ右へずらす
-    wsDst.Cells(1, 13).Value = "社員番号"  ' ★
-    wsDst.Cells(1, 14).Value = "氏名"      ' ★
-
-    
-    outRow = 2
-    
-    '===== 2. ファイル選択ダイアログ =====
+    '===== ファイル選択 =====
     fPath = Application.GetOpenFilename( _
                 FileFilter:="Excelファイル (*.xlsx;*.xlsm;*.xls),*.xlsx;*.xlsm;*.xls", _
                 Title:=dialogTitle)
@@ -142,7 +85,7 @@ Private Sub 本社階層表_統合出力_1ファイル( _
         GoTo ExitPoint
     End If
     
-    '===== 3. 選択ファイルを読み取り専用で開く =====
+    '===== 本社シートを開く =====
     Set wbSrc = Workbooks.Open(Filename:=fPath, ReadOnly:=True)
     
     On Error Resume Next
@@ -154,7 +97,7 @@ Private Sub 本社階層表_統合出力_1ファイル( _
         GoTo ExitPoint
     End If
     
-    '===== 4. 「第1階層〜第5階層」の位置を特定 =====
+    '===== 第1〜第5階層の位置を特定 =====
     levelNames(1) = "第1階層"
     levelNames(2) = "第2階層"
     levelNames(3) = "第3階層"
@@ -170,92 +113,115 @@ Private Sub 本社階層表_統合出力_1ファイル( _
         levelCol(i) = c.Column
         If i = 1 Then
             hierRow = c.Row
-        Else
-            ' 念のため、行がずれていたらエラー
-            If c.Row <> hierRow Then
-                MsgBox "第1〜第5階層のセルが同じ行にありません。（" & dstSheetName & "）", vbExclamation
-                GoTo ExitPoint
-            End If
+        ElseIf c.Row <> hierRow Then
+            MsgBox "第1〜第5階層のセルが同じ行にありません。（" & dstSheetName & "）", vbExclamation
+            GoTo ExitPoint
         End If
     Next i
     
     headerRow = hierRow + 1
     dataStartRow = headerRow + 1
     
-    '===== 最終行を「5階層 × 3項目」の中で最も深いところに合わせる =====
+    '===== 最終行判定 =====
     lastRow = 0
-    
     For i = 1 To 5
-        ' 職位
-        testCol = levelCol(i) + 2
+        testCol = levelCol(i) + 2   ' 職位
         tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
         If tmpLast > lastRow Then lastRow = tmpLast
         
-        ' 社員番号
-        testCol = levelCol(i) + 3
+        testCol = levelCol(i) + 3   ' 社員番号
         tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
         If tmpLast > lastRow Then lastRow = tmpLast
         
-        ' 氏名
-        testCol = levelCol(i) + 4
+        testCol = levelCol(i) + 4   ' 氏名
         tmpLast = wsSrc.Cells(wsSrc.Rows.Count, testCol).End(xlUp).Row
         If tmpLast > lastRow Then lastRow = tmpLast
     Next i
     
-    ' データ開始行より上ならエラー
     If lastRow < dataStartRow Then
         MsgBox "データ行が見つかりません。（" & dstSheetName & "）", vbExclamation
         GoTo ExitPoint
     End If
     
-    '===== 5. データ行ループ =====
+    '===== ここで初めて出力シートをクリア＆ヘッダ設定 =====
+    wsDst.Cells.Clear
+    
+    wsDst.Cells(1, 1).Value = "D列情報"
+    wsDst.Cells(1, 2).Value = "第1階層_部門コード"
+    wsDst.Cells(1, 3).Value = "第1階層_部門名称"
+    wsDst.Cells(1, 4).Value = "第2階層_部門コード"
+    wsDst.Cells(1, 5).Value = "第2階層_部門名称"
+    wsDst.Cells(1, 6).Value = "第3階層_部門コード"
+    wsDst.Cells(1, 7).Value = "第3階層_部門名称"
+    wsDst.Cells(1, 8).Value = "第4階層_部門コード"
+    wsDst.Cells(1, 9).Value = "第4階層_部門名称"
+    wsDst.Cells(1, 10).Value = "第5階層_部門コード"
+    wsDst.Cells(1, 11).Value = "第5階層_部門名称"
+    wsDst.Cells(1, 12).Value = "職位"
+    wsDst.Cells(1, 13).Value = "社員番号"
+    wsDst.Cells(1, 14).Value = "氏名"
+    
+    outRow = 2
+    
+    '===== データ行ループ =====
     For r = dataStartRow To lastRow
         
         activeLevel = 0
         valTitle = ""
         valEmpNo = ""
         valEmpName = ""
-        valD = Trim$(GetMergedText(wsSrc.Cells(r, "D")))  ' ★ D列情報取得
-
-        ' --- どの階層に職位・社員番号・氏名が入っているか探す ---
+        valD = Trim$(GetMergedText(wsSrc.Cells(r, "D")))  ' 本社D列
+        
+        ' どの階層に職位・社員番号・氏名がいるか
         For lvl = 1 To 5
-            ' ...（略）...
+            
+            colTitle = levelCol(lvl) + 2      ' 職位
+            colEmpNo = levelCol(lvl) + 3      ' 社員番号
+            colEmpName = levelCol(lvl) + 4    ' 氏名
+            
+            valTitle = Trim$(GetMergedText(wsSrc.Cells(r, colTitle)))
+            valEmpNo = Trim$(GetMergedText(wsSrc.Cells(r, colEmpNo)))
+            valEmpName = Trim$(GetMergedText(wsSrc.Cells(r, colEmpName)))
+            
+            If (valTitle <> "") Or (valEmpNo <> "") Or (valEmpName <> "") Then
+                activeLevel = lvl
+                Exit For
+            End If
         Next lvl
         
-        ' この行に有効な階層がなければスキップ
-        If activeLevel = 0 Then
-            GoTo NextRow
-        End If
-
-        ' ★★★ ここで D列情報を1列目に書き込む ★★★
+        If activeLevel = 0 Then GoTo NextRow
+        
+        ' D列情報
         wsDst.Cells(outRow, 1).Value = valD
-
-        '===== 6. 左側の階層分の部門コード・部門名称を取得して出力 =====
+        
+        ' 部門コード・名称（階層1〜activeLevel）
         For lvl = 1 To activeLevel
-            ' ...（略）...
+            colCode = levelCol(lvl)
+            colName = levelCol(lvl) + 1
+            
+            tmpCode = Trim$(GetMergedText(wsSrc.Cells(r, colCode)))
+            tmpName = Trim$(GetMergedText(wsSrc.Cells(r, colName)))
+            
+            wsDst.Cells(outRow, 2 * (lvl - 1) + 2).Value = tmpCode
+            wsDst.Cells(outRow, 2 * (lvl - 1) + 3).Value = tmpName
         Next lvl
-
-        '===== 7. 職位・社員番号・氏名を12〜14列目に出力 =====
+        
+        ' 職位・社員番号・氏名
         wsDst.Cells(outRow, 12).Value = valTitle
         wsDst.Cells(outRow, 13).Value = valEmpNo
         wsDst.Cells(outRow, 14).Value = valEmpName
-
+        
         outRow = outRow + 1
-
+        
 NextRow:
     Next r
     
-    ' ちょっと整える
-    wsDst.Columns("A:N").EntireColumn.AutoFit   ' ★ A:M → A:N に
-
-    
+    wsDst.Columns("A:N").EntireColumn.AutoFit
     MsgBox dstSheetName & " の出力が完了しました。", vbInformation
 
 ExitPoint:
     On Error Resume Next
-    If Not wbSrc Is Nothing Then
-        wbSrc.Close SaveChanges:=False  ' 元ファイルは変更しない
-    End If
+    If Not wbSrc Is Nothing Then wbSrc.Close SaveChanges:=False
     Application.ScreenUpdating = True
     On Error GoTo 0
     Exit Sub
@@ -264,7 +230,6 @@ ErrHandler:
     MsgBox "エラーが発生しました。（" & dstSheetName & "）" & vbCrLf & _
            Err.Number & " : " & Err.Description, vbCritical
     Resume ExitPoint
-
 End Sub
 
 
