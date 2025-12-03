@@ -16,6 +16,13 @@
 <body>
 <h2>VBA Code</h2>
 <pre><code>
+
+
+
+
+
+
+  
 Option Explicit
 
 ' 部門名称 5階層が変わったかどうか判定
@@ -117,7 +124,7 @@ Public Sub 入退職者_異動情報_作成()
     '----- データ読み込み -----
     LoadMonthData wsCur, dictCurDept, dictCurTitle, dictCurName
     LoadMonthData wsPrev, dictPrevDept, dictPrevTitle, dictPrevName
-    
+          
     '===============================
     '   入退職者情報 シートの作成
     '===============================
@@ -126,42 +133,49 @@ Public Sub 入退職者_異動情報_作成()
     On Error GoTo ErrHandler
     
     If wsInOut Is Nothing Then
+        ' ★初回だけシート作成＆見出し・結合を設定
         Set wsInOut = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
         wsInOut.Name = "入退職者情報"
+        
+        With wsInOut
+            ' 見出し（1行目）
+            .Range("A1:H1").Merge
+            .Range("A1").Value = "新規入職者"
+            .Range("J1:Q1").Merge
+            .Range("J1").Value = "退職者"
+            
+            ' 2行目 見出し（新規入職者側）
+            .Range("A2").Value = "第1階層_部門名称"
+            .Range("B2").Value = "第2階層_部門名称"
+            .Range("C2").Value = "第3階層_部門名称"
+            .Range("D2").Value = "第4階層_部門名称"
+            .Range("E2").Value = "第5階層_部門名称"
+            .Range("F2").Value = "職位"
+            .Range("G2").Value = "社員番号"
+            .Range("H2").Value = "氏名"
+            
+            ' 2行目 見出し（退職者側）
+            .Range("J2").Value = "第1階層_部門名称"
+            .Range("K2").Value = "第2階層_部門名称"
+            .Range("L2").Value = "第3階層_部門名称"
+            .Range("M2").Value = "第4階層_部門名称"
+            .Range("N2").Value = "第5階層_部門名称"
+            .Range("O2").Value = "職位"
+            .Range("P2").Value = "社員番号"
+            .Range("Q2").Value = "氏名"
+        End With
+        
+    Else
+        ' ★2回目以降はデータ行だけ消す（3行目以降）
+        With wsInOut
+            .Range("A3:H" & .Rows.Count).ClearContents
+            .Range("J3:Q" & .Rows.Count).ClearContents
+        End With
     End If
     
-    With wsInOut
-        .Cells.Clear
-        
-        ' 見出し（1行目）
-        .Range("A1:H1").Merge
-        .Range("A1").Value = "新規入職者"
-        .Range("J1:Q1").Merge
-        .Range("J1").Value = "退職者"
-        
-        ' 2行目 見出し（新規入職者側）
-        .Range("A2").Value = "第1階層_部門名称"
-        .Range("B2").Value = "第2階層_部門名称"
-        .Range("C2").Value = "第3階層_部門名称"
-        .Range("D2").Value = "第4階層_部門名称"
-        .Range("E2").Value = "第5階層_部門名称"
-        .Range("F2").Value = "職位"
-        .Range("G2").Value = "社員番号"
-        .Range("H2").Value = "氏名"
-        
-        ' 2行目 見出し（退職者側）
-        .Range("J2").Value = "第1階層_部門名称"
-        .Range("K2").Value = "第2階層_部門名称"
-        .Range("L2").Value = "第3階層_部門名称"
-        .Range("M2").Value = "第4階層_部門名称"
-        .Range("N2").Value = "第5階層_部門名称"
-        .Range("O2").Value = "職位"
-        .Range("P2").Value = "社員番号"
-        .Range("Q2").Value = "氏名"
-        
-        rowNew = 3
-        rowLeave = 3
-    End With
+    rowNew = 3
+    rowLeave = 3
+
     
     '----- 新規入職者（今月にいて先月にいない） -----
     keys = dictCurDept.Keys
@@ -213,42 +227,46 @@ Public Sub 入退職者_異動情報_作成()
     On Error GoTo ErrHandler
     
     If wsMove Is Nothing Then
+        ' ★初回だけシート作成＆見出し・結合を設定
         Set wsMove = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
         wsMove.Name = "異動情報"
+        
+        With wsMove
+            ' 1行目 見出し（大見出し）
+            .Range("A1:E1").Merge
+            .Range("A1").Value = "先月所属"
+            .Range("F1:J1").Merge
+            .Range("F1").Value = "今月所属"
+            .Range("K1").Value = "職位"
+            .Range("L1").Value = "社員番号"
+            .Range("M1").Value = "氏名"
+            
+            ' 2行目 細かい見出し
+            .Range("A2").Value = "第1階層_部門名称"
+            .Range("B2").Value = "第2階層_部門名称"
+            .Range("C2").Value = "第3階層_部門名称"
+            .Range("D2").Value = "第4階層_部門名称"
+            .Range("E2").Value = "第5階層_部門名称"
+            
+            .Range("F2").Value = "第1階層_部門名称"
+            .Range("G2").Value = "第2階層_部門名称"
+            .Range("H2").Value = "第3階層_部門名称"
+            .Range("I2").Value = "第4階層_部門名称"
+            .Range("J2").Value = "第5階層_部門名称"
+            
+            .Range("K2").Value = "職位"
+            .Range("L2").Value = "社員番号"
+            .Range("M2").Value = "氏名"
+        End With
+        
+    Else
+        ' ★2回目以降はデータ行だけ消す（3行目以降）
+        With wsMove
+            .Range("A3:M" & .Rows.Count).ClearContents
+        End With
     End If
     
-    With wsMove
-        .Cells.Clear
-        
-        ' 1行目 見出し（大見出し）
-        .Range("A1:E1").Merge
-        .Range("A1").Value = "先月所属"
-        .Range("F1:J1").Merge
-        .Range("F1").Value = "今月所属"
-        .Range("K1").Value = "職位"
-        .Range("L1").Value = "社員番号"
-        .Range("M1").Value = "氏名"
-        
-        ' 2行目 細かい見出し
-        .Range("A2").Value = "第1階層_部門名称"
-        .Range("B2").Value = "第2階層_部門名称"
-        .Range("C2").Value = "第3階層_部門名称"
-        .Range("D2").Value = "第4階層_部門名称"
-        .Range("E2").Value = "第5階層_部門名称"
-        
-        .Range("F2").Value = "第1階層_部門名称"
-        .Range("G2").Value = "第2階層_部門名称"
-        .Range("H2").Value = "第3階層_部門名称"
-        .Range("I2").Value = "第4階層_部門名称"
-        .Range("J2").Value = "第5階層_部門名称"
-        
-        .Range("K2").Value = "職位"
-        .Range("L2").Value = "社員番号"
-        .Range("M2").Value = "氏名"
-        
-        rowMove = 3
-    End With
-    
+    rowMove = 3
     '----- 異動者（両方にいるが部門名称が変わった人） -----
     keys = dictCurDept.Keys
     For i = LBound(keys) To UBound(keys)
