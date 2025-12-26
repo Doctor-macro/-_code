@@ -17,6 +17,19 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+
+
+
+
+
+
+
+
+
+
+
+
+  
 Option Explicit
 
 '========================
@@ -46,7 +59,7 @@ Private Function NzStr(ByVal v As Variant) As String
 End Function
 
 Private Function NextWriteRow(ByVal wsOut As Worksheet) As Long
-    ' 反映ファイル：4行目以降に追記
+    ' 反映ファイル：4行目以降に追記（A列を基準に）
     Dim lastA As Long
     lastA = wsOut.Cells(wsOut.Rows.Count, "A").End(xlUp).Row
     If lastA < 4 Then
@@ -61,7 +74,7 @@ End Function
 '=========================================================
 Public Sub 取り込み実行_本社_配属店舗一覧()
     Dim wsOut As Worksheet
-    Set wsOut = ActiveSheet  ' 出力先は反映ファイルのアクティブシート想定（必要なら固定名に変更）
+    Set wsOut = ActiveSheet  ' 出力先（必要なら固定名に変更）
 
     Dim fd As FileDialog
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
@@ -138,52 +151,50 @@ Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     Dim baseCol As Long
     Dim deptName(1 To 5) As String
     Dim pos As String, empNo As String, empName As String
-    Dim wrote As Boolean
 
     For r = 5 To lastRow
-        ' 階層部門名称を毎行拾う（結合セル対策で GetMergedText）
+        ' 階層部門名称（結合セル対策）
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5 ' G=7
             deptName(tier) = Trim$(GetMergedText(ws.Cells(r, baseCol + 1))) ' 部門名称
         Next tier
 
-        wrote = False
-
         ' どこかの階層に(職位/社員番号/氏名)が入っている → その分だけ出力
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5
 
-            pos = Trim$(NzStr(ws.Cells(r, baseCol + 2).Value))    ' 職位
-            empNo = Trim$(NzStr(ws.Cells(r, baseCol + 3).Value))  ' 社員番号
-            empName = Trim$(NzStr(ws.Cells(r, baseCol + 4).Value))' 氏名
+            pos = Trim$(NzStr(ws.Cells(r, baseCol + 2).Value))     ' 職位
+            empNo = Trim$(NzStr(ws.Cells(r, baseCol + 3).Value))   ' 社員番号
+            empName = Trim$(NzStr(ws.Cells(r, baseCol + 4).Value)) ' 氏名
 
             If (empNo <> "") Or (empName <> "") Or (pos <> "") Then
                 Dim outR As Long
                 outR = NextWriteRow(wsOut)
 
-                ' 共通
-                wsOut.Cells(outR, "A").Value = fileBase
-                ' B列は触らない
+                '=========================
+                ' 右に1列ずらした出力
+                '=========================
+                ' A列：本社は「反映ファイルのD列の値」＝第2階層 部門名称
+                wsOut.Cells(outR, "A").Value = deptName(2)
 
-                ' 本社 指定列
-                wsOut.Cells(outR, "C").Value = deptName(1)
-                wsOut.Cells(outR, "D").Value = deptName(2)
-                wsOut.Cells(outR, "E").Value = deptName(3)
-                wsOut.Cells(outR, "F").Value = deptName(4)
-                wsOut.Cells(outR, "G").Value = deptName(5)
+                ' B列：ファイル名
+                wsOut.Cells(outR, "B").Value = fileBase
 
-                wsOut.Cells(outR, "I").Value = empNo
-                wsOut.Cells(outR, "J").Value = empName
-                wsOut.Cells(outR, "K").Value = pos
+                ' C列：手動編集用（触らない）
 
-                wrote = True
+                ' 本社：旧(C～G) → 新(D～H)
+                wsOut.Cells(outR, "D").Value = deptName(1)
+                wsOut.Cells(outR, "E").Value = deptName(2)
+                wsOut.Cells(outR, "F").Value = deptName(3)
+                wsOut.Cells(outR, "G").Value = deptName(4)
+                wsOut.Cells(outR, "H").Value = deptName(5)
+
+                ' 本社：旧(I～K) → 新(J～L)
+                wsOut.Cells(outR, "J").Value = empNo
+                wsOut.Cells(outR, "K").Value = empName
+                wsOut.Cells(outR, "L").Value = pos
             End If
         Next tier
-
-        ' もし階層部門だけで社員情報が一切ない行はスキップ（必要ならここで出力に変更可能）
-        If wrote = False Then
-            ' do nothing
-        End If
     Next r
 End Sub
 
@@ -215,6 +226,7 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     '   先頭：社員番号 / 2列目：店長 or 社員X / 3列目：異動日（今回は不要）
     Dim dept1 As String, dept2 As String, dept3 As String, dept4 As String
     Dim shopName As String
+    Dim sheetB As String  ' ★配属店舗一覧シートB列の値（これを反映ファイルA列へ）
 
     Dim posCols(1 To 5) As Long
     Dim startCols(1 To 5) As Long
@@ -234,36 +246,46 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
         dept4 = Trim$(GetMergedText(ws.Cells(r, "AI")))
         shopName = Trim$(NzStr(ws.Cells(r, "AO").Value))
 
-        ' ブロック(最大5)を見て、社員番号が入っている分だけ出力
+        ' ★配属店舗一覧シートのB列（結合セルの可能性があるなら GetMergedText にする）
+        sheetB = Trim$(GetMergedText(ws.Cells(r, "B")))
+
+        ' ブロック(最大5)を見て、社員番号等が入っている分だけ出力
         For blk = 1 To 5
             pos = Trim$(NzStr(ws.Cells(r, posCols(blk)).Value))
-            empNo = Trim$(NzStr(ws.Cells(r, startCols(blk) + 0).Value))   ' 社員番号
-            label = Trim$(NzStr(ws.Cells(r, startCols(blk) + 1).Value))   ' 店長 or 社員X
-            ' startCols(blk) + 2 は異動日（今回は出力不要）
+            empNo = Trim$(NzStr(ws.Cells(r, startCols(blk) + 0).Value)) ' 社員番号
+            label = Trim$(NzStr(ws.Cells(r, startCols(blk) + 1).Value)) ' 店長 or 社員X
 
             If empNo <> "" Or label <> "" Or pos <> "" Then
                 Dim outR As Long
                 outR = NextWriteRow(wsOut)
 
-                ' 共通
-                wsOut.Cells(outR, "A").Value = fileBase
-                ' B列は触らない
+                '=========================
+                ' 右に1列ずらした出力
+                '=========================
+                ' A列：配属店舗一覧シートのB列の値
+                wsOut.Cells(outR, "A").Value = sheetB
 
-                ' 配属店舗一覧 指定列
-                wsOut.Cells(outR, "C").Value = dept1
-                ' D列は指定なし（空でOK）
-                wsOut.Cells(outR, "E").Value = dept2
-                wsOut.Cells(outR, "F").Value = dept3
-                wsOut.Cells(outR, "G").Value = dept4
+                ' B列：ファイル名
+                wsOut.Cells(outR, "B").Value = fileBase
 
-                wsOut.Cells(outR, "H").Value = shopName
-                wsOut.Cells(outR, "I").Value = empNo
-                wsOut.Cells(outR, "J").Value = label
-                wsOut.Cells(outR, "K").Value = pos
+                ' C列：手動編集用（触らない）
+
+                ' 配属店舗一覧：旧(C,E,F,G,H,I,J,K) → 新(D,F,G,H,I,J,K,L)
+                wsOut.Cells(outR, "D").Value = dept1
+                ' E列は指定なし（旧D列相当）→ 空でOK
+                wsOut.Cells(outR, "F").Value = dept2
+                wsOut.Cells(outR, "G").Value = dept3
+                wsOut.Cells(outR, "H").Value = dept4
+
+                wsOut.Cells(outR, "I").Value = shopName
+                wsOut.Cells(outR, "J").Value = empNo
+                wsOut.Cells(outR, "K").Value = label
+                wsOut.Cells(outR, "L").Value = pos
             End If
         Next blk
     Next r
 End Sub
+
 
                           
 </code></pre>
