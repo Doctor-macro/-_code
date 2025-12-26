@@ -17,6 +17,20 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
 Option Explicit
 
 '========================
@@ -240,7 +254,15 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
         shopName = Trim$(NzStr(ws.Cells(r, "AO").Value))
 
         ' ★配属店舗一覧シートB列（結合セルの可能性があるので GetMergedText）
-        sheetB = Trim$(GetMergedText(ws.Cells(r, "B")))
+        Dim tmpB As String
+        tmpB = Trim$(GetMergedText(ws.Cells(r, "B")))
+        
+        If Len(tmpB) > 0 Then
+            sheetB = Left$(tmpB, 1)
+        Else
+            sheetB = ""
+        End If
+
 
         ' ブロック(最大5)を見て、社員番号等が入っている分だけ出力
         For blk = 1 To 5
