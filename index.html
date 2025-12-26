@@ -17,19 +17,6 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-
-
-
-
-
-
-
-
-
-
-
-
-  
 Option Explicit
 
 '========================
@@ -145,6 +132,9 @@ Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     Dim fileBase As String
     fileBase = wbSrc.Name
 
+    ' ★本社シート D列（A-Fのブロック内）を反映ファイルA列へ
+    Dim honsyaD As String
+
     ' 本社：G～AE（5列×5階層）
     ' 各階層：部門コード, 部門名称, 職位, 社員番号, 氏名
     Dim tier As Long
@@ -153,6 +143,9 @@ Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     Dim pos As String, empNo As String, empName As String
 
     For r = 5 To lastRow
+        ' 本社シートのD列値（結合なら左上取得）
+        honsyaD = Trim$(GetMergedText(ws.Cells(r, "D")))
+
         ' 階層部門名称（結合セル対策）
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5 ' G=7
@@ -174,8 +167,8 @@ Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
                 '=========================
                 ' 右に1列ずらした出力
                 '=========================
-                ' A列：本社は「反映ファイルのD列の値」＝第2階層 部門名称
-                wsOut.Cells(outR, "A").Value = deptName(2)
+                ' A列：本社シートのD列値
+                wsOut.Cells(outR, "A").Value = honsyaD
 
                 ' B列：ファイル名
                 wsOut.Cells(outR, "B").Value = fileBase
@@ -226,7 +219,7 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     '   先頭：社員番号 / 2列目：店長 or 社員X / 3列目：異動日（今回は不要）
     Dim dept1 As String, dept2 As String, dept3 As String, dept4 As String
     Dim shopName As String
-    Dim sheetB As String  ' ★配属店舗一覧シートB列の値（これを反映ファイルA列へ）
+    Dim sheetB As String  ' ★配属店舗一覧シートB列の値 → 反映A列へ
 
     Dim posCols(1 To 5) As Long
     Dim startCols(1 To 5) As Long
@@ -246,7 +239,7 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
         dept4 = Trim$(GetMergedText(ws.Cells(r, "AI")))
         shopName = Trim$(NzStr(ws.Cells(r, "AO").Value))
 
-        ' ★配属店舗一覧シートのB列（結合セルの可能性があるなら GetMergedText にする）
+        ' ★配属店舗一覧シートB列（結合セルの可能性があるので GetMergedText）
         sheetB = Trim$(GetMergedText(ws.Cells(r, "B")))
 
         ' ブロック(最大5)を見て、社員番号等が入っている分だけ出力
