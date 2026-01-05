@@ -20,48 +20,12 @@
 =LET(
   base,INT($B$2),
   prev,INT(EDATE(base,-1)),
-
   ID,Sheet1!$J$4:$J$20000,
-  NM,Sheet1!$K$4:$K$20000,
   Mon,INT(Sheet1!$C$4:$C$20000),
-
   idsBase, UNIQUE(FILTER(ID, Mon=base)),
   idsPrev, UNIQUE(FILTER(ID, Mon=prev)),
   common, FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0))),
-
-  chg, FILTER(common, MAP(common, LAMBDA(e,
-        月別最高位ランク(e,prev)<>月別最高位ランク(e,base)
-  ))),
-
-  getName, LAMBDA(e, m,
-    LET(
-      idm, FILTER(ID, Mon=m),
-      nmm, FILTER(NM, Mon=m),
-      IFERROR(XLOOKUP(e, idm, nmm, ""), "")
-    )
-  ),
-
-  getPos7, LAMBDA(e, m,
-    LET(
-      s, IFERROR(月別職位文字列(e,m), ""),
-      IF(s="",
-        HSTACK("","","","","","",""),
-        TAKE(TEXTSPLIT(s,"／"),,7)
-      )
-    )
-  ),
-
-  makeRow, LAMBDA(e,
-    LET(
-      namePrev, getName(e, prev),
-      nameNow,  getName(e, base),
-      prevPos,  getPos7(e, prev),
-      basePos,  getPos7(e, base),
-      HSTACK(e, namePrev, prevPos, "", e, nameNow, basePos)
-    )
-  ),
-
-  IFERROR( IF(ROWS(chg)=0, "該当なし", MAP(chg, makeRow)), "該当なし")
+  SUM(--MAP(common, LAMBDA(e, 月別最高位ランク(e,prev)<>月別最高位ランク(e,base))))
 )
 
                           
