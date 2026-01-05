@@ -17,34 +17,77 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-=LAMBDA(p,
-  XMATCH(p,
-  {"総括部長/本部長","事業部長","副本部長","本部長代行","部長","企画担当部長","センター長","部長代行","次長","室長","課長","店長","PS店長","室長代行","課長代行","副店長","MGR","AMGR/CMGR","ユニットリーダー","チームリーダー","サブリーダー","ハピカンキャプテン","一般社員","PS社員","派遣社員","契約社員","外部"},
-  0)
-)
+=LET(
+  base,$B$2,
+  prev,EDATE(base,-1),
 
+  ID,Sheet1!$J$4:$J$20000,
+  Mon,Sheet1!$C$4:$C$20000,
 
-  =LAMBDA(emp, m,
-  LET(
-    ID,Sheet1!$J$4:$J$20000,
-    Mon,Sheet1!$C$4:$C$20000,
-    Pos,Sheet1!$L$4:$L$20000,
-    list, UNIQUE(FILTER(Pos,(ID=emp)*(Mon=m))),
-    sorted, SORTBY(list, MAP(list, 役職ランク)),
-    TEXTJOIN("／",,sorted)
+  idsBase, UNIQUE(FILTER(ID, Mon=base)),
+  idsPrev, UNIQUE(FILTER(ID, Mon=prev)),
+  common, FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0))),
+
+  FILTER(
+    common,
+    月別最高位ランク(common,prev)<>月別最高位ランク(common,base)
   )
 )
 
 
-  =LAMBDA(emp, m,
+
+
+
+
+
+      =LAMBDA(emp, m,
   LET(
     ID,Sheet1!$J$4:$J$20000,
     Mon,Sheet1!$C$4:$C$20000,
     Pos,Sheet1!$L$4:$L$20000,
-    list, UNIQUE(FILTER(Pos,(ID=emp)*(Mon=m))),
-    MIN(MAP(list, 役職ランク))
+
+    one, LAMBDA(e,
+      LET(
+        list, UNIQUE(FILTER(Pos,(ID=e)*(Mon=m))),
+        IFERROR(MIN(役職ランク(list)), 9999)
+      )
+    ),
+
+    IF(ROWS(emp)*COLUMNS(emp)=1,
+      one(emp),
+      BYROW(emp, LAMBDA(r, one(INDEX(emp, r))))
+    )
   )
 )
+
+
+
+
+
+
+
+
+      =LET(
+  e, INDEX($U$4#, ROWS($A$4:A4)),
+  base,$B$2,
+  prev,EDATE(base,-1),
+
+  ID,Sheet1!$J$4:$J$20000,
+  NM,Sheet1!$K$4:$K$20000,
+  Mon,Sheet1!$C$4:$C$20000,
+
+  nameNow, XLOOKUP(e, FILTER(ID,Mon=base), FILTER(NM,Mon=base)),
+
+  prevPos, TAKE(TEXTSPLIT(月別職位文字列(e,prev),"／"),,7),
+  basePos, TAKE(TEXTSPLIT(月別職位文字列(e,base),"／"),,7),
+
+  HSTACK(
+    e, nameNow, prevPos,
+    "", 
+    e, nameNow, basePos
+  )
+)
+
 
 
 
