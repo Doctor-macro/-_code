@@ -22,82 +22,6 @@
   prev,EDATE(base,-1),
 
   ID,Sheet1!$J$4:$J$20000,
-  Mon,Sheet1!$C$4:$C$20000,
-
-  idsBase, UNIQUE(FILTER(ID, Mon=base)),
-  idsPrev, UNIQUE(FILTER(ID, Mon=prev)),
-  common, FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0))),
-
-  FILTER(
-    common,
-    月別最高位ランク(common,prev)<>月別最高位ランク(common,base)
-  )
-)
-
-
-
-
-
-
-
-      =LAMBDA(emp, m,
-  LET(
-    ID,Sheet1!$J$4:$J$20000,
-    Mon,Sheet1!$C$4:$C$20000,
-    Pos,Sheet1!$L$4:$L$20000,
-
-    one, LAMBDA(e,
-      LET(
-        list, UNIQUE(FILTER(Pos,(ID=e)*(Mon=m))),
-        IFERROR(MIN(役職ランク(list)), 9999)
-      )
-    ),
-
-    IF(ROWS(emp)*COLUMNS(emp)=1,
-      one(emp),
-      BYROW(emp, LAMBDA(r, one(INDEX(emp, r))))
-    )
-  )
-)
-
-
-
-
-
-
-
-
-      =LET(
-  e, INDEX($U$4#, ROWS($A$4:A4)),
-  base,$B$2,
-  prev,EDATE(base,-1),
-
-  ID,Sheet1!$J$4:$J$20000,
-  NM,Sheet1!$K$4:$K$20000,
-  Mon,Sheet1!$C$4:$C$20000,
-
-  nameNow, XLOOKUP(e, FILTER(ID,Mon=base), FILTER(NM,Mon=base)),
-
-  prevPos, TAKE(TEXTSPLIT(月別職位文字列(e,prev),"／"),,7),
-  basePos, TAKE(TEXTSPLIT(月別職位文字列(e,base),"／"),,7),
-
-  HSTACK(
-    e, nameNow, prevPos,
-    "", 
-    e, nameNow, basePos
-  )
-)
-
-
-
-
-
-
-  =LET(
-  base,$B$2,
-  prev,EDATE(base,-1),
-
-  ID,Sheet1!$J$4:$J$20000,
   NM,Sheet1!$K$4:$K$20000,
   Mon,Sheet1!$C$4:$C$20000,
 
@@ -110,14 +34,16 @@
   makeRow, LAMBDA(e,
     LET(
       nameNow, XLOOKUP(e, FILTER(ID,Mon=base), FILTER(NM,Mon=base)),
-      rPrev, TAKE(TEXTSPLIT(月別職位文字列(e,prev),"／"),,7),
-      rBase, TAKE(TEXTSPLIT(月別職位文字列(e,base),"／"),,7),
+      namePrev, XLOOKUP(e, FILTER(ID,Mon=prev), FILTER(NM,Mon=prev)),
 
-      rankPrev, 月別最高位ランク(e,prev),
-      rankBase, 月別最高位ランク(e,base),
-      kubun, IF(rankBase<rankPrev,"昇格",IF(rankBase>rankPrev,"降格","")),
+      prevPos, TAKE(TEXTSPLIT(月別職位文字列(e,prev),"／"),,7),
+      basePos, TAKE(TEXTSPLIT(月別職位文字列(e,base),"／"),,7),
 
-      HSTACK(kubun, e, nameNow, rPrev, rBase)
+      HSTACK(
+        e, namePrev, prevPos,   /* A:I 前月 */
+        "",                     /* J 空白 */
+        e, nameNow,  basePos    /* K:S 当月 */
+      )
     )
   ),
 
