@@ -249,9 +249,10 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
         End If
 
         If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then
-            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, dept4, shopName, _
+            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, dept4, "", _
                 NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
         End If
+
     Next r
 End Sub
 
