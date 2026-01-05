@@ -19,13 +19,12 @@
 
 
 
-
-
-
-
-
-
 Option Explicit
+
+'=================================================
+' 職位→順位の辞書（キャッシュ）
+'=================================================
+Private gPosRank As Object
 
 '========================
 ' 共通：結合セル対応
@@ -108,18 +107,9 @@ End Sub
 
 '=================================================
 ' 職位順位（職位順位シートから読込）
-'   職位順位!A2:A30 = 1..29（数字）
+'   職位順位!A2:A30 = 1..（数字）
 '   職位順位!B2:B30 = 職位名（文字列）
 '=================================================
-Private gPosRank As Object
-
-' キャッシュ破棄（手動で呼びたい場合用）
-Public Sub 職位順位_再読み込み()
-    Set gPosRank = Nothing
-    MsgBox "職位順位を再読み込みしました。", vbInformation
-End Sub
-
-' 辞書取得（未ロードならロード）
 Private Function GetPosRankDict() As Object
     If Not gPosRank Is Nothing Then
         Set GetPosRankDict = gPosRank
@@ -128,7 +118,7 @@ Private Function GetPosRankDict() As Object
 
     Dim d As Object
     Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = vbTextCompare ' 大文字小文字無視（不要なら削除）
+    d.CompareMode = vbTextCompare
 
     Dim ws As Worksheet
     On Error Resume Next
@@ -147,11 +137,9 @@ Private Function GetPosRankDict() As Object
         rankV = ws.Cells(r, "A").Value
         pos = Trim$(CStr(ws.Cells(r, "B").Value))
 
-        If pos <> "" Then
-            If IsNumeric(rankV) Then
-                ' 同名が複数あったら先勝ち（後勝ちにしたいならIfを外して代入）
-                If Not d.Exists(pos) Then d.Add pos, CLng(rankV)
-            End If
+        If pos <> "" And IsNumeric(rankV) Then
+            ' 同名が複数あったら先勝ち
+            If Not d.Exists(pos) Then d.Add pos, CLng(rankV)
         End If
     Next r
 
@@ -159,7 +147,7 @@ Private Function GetPosRankDict() As Object
     Set GetPosRankDict = gPosRank
 End Function
 
-' 職位→順位
+' 職位→順位（シート基準）
 Private Function PosRank(ByVal pos As String) As Variant
     Dim p As String
     p = Trim$(CStr(pos))
@@ -174,9 +162,16 @@ Private Function PosRank(ByVal pos As String) As Variant
     If d.Exists(p) Then
         PosRank = d(p)
     Else
-        PosRank = ""  ' 見つからなければ空（999等にしたければ変更）
+        PosRank = ""
     End If
 End Function
+
+' シート編集後に手動で再読み込みしたい場合
+Public Sub 職位順位_再読み込み()
+    Set gPosRank = Nothing
+    Call GetPosRankDict
+    MsgBox "職位順位を再読み込みしました。", vbInformation
+End Sub
 
 '========================
 ' 配属店舗一覧：1行出力
@@ -207,7 +202,7 @@ End Sub
 '========================
 Public Sub 取り込み実行_本社_配属店舗一覧()
 
-    ' ★毎回、職位順位シートの最新を読む（手で変えた内容を確実に反映）
+    ' ★毎回、職位順位シートの最新を読む
     Set gPosRank = Nothing
     Call GetPosRankDict
 
@@ -218,6 +213,7 @@ Public Sub 取り込み実行_本社_配属店舗一覧()
     Dim fd As FileDialog
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
     fd.AllowMultiSelect = True
+    fd.Filters.Clear
     fd.Filters.Add "Excel", "*.xlsx;*.xlsm;*.xls"
     If fd.Show <> -1 Then Exit Sub
 
@@ -327,8 +323,6 @@ Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
                 NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
     Next r
 End Sub
-
-
 
   
 
