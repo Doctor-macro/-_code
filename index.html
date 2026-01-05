@@ -17,16 +17,269 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-=LET(
-  base,INT($B$2),
-  prev,INT(EDATE(base,-1)),
-  ID,Sheet1!$J$4:$J$20000,
-  Mon,INT(Sheet1!$C$4:$C$20000),
-  idsBase, UNIQUE(FILTER(ID, Mon=base)),
-  idsPrev, UNIQUE(FILTER(ID, Mon=prev)),
-  common, FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0))),
-  SUM(--MAP(common, LAMBDA(e, 月別最高位ランク(e,prev)<>月別最高位ランク(e,base))))
-)
+Option Explicit
+
+'========================
+' 共通：結合セル対応
+'========================
+Private Function GetMergedText(ByVal rng As Range) As String
+    If rng Is Nothing Then Exit Function
+    If rng.MergeCells Then
+        GetMergedText = CStr(rng.MergeArea.Cells(1, 1).Value)
+    Else
+        GetMergedText = CStr(rng.Value)
+    End If
+End Function
+
+Private Function NzStr(ByVal v As Variant) As String
+    If IsError(v) Or IsEmpty(v) Then
+        NzStr = ""
+    Else
+        NzStr = CStr(v)
+    End If
+End Function
+
+'========================
+' 結合セル左上行判定
+'========================
+Private Function IsMergeTopLeftRow(ByVal c As Range) As Boolean
+    If c.MergeCells Then
+        IsMergeTopLeftRow = (c.Row = c.MergeArea.Row And c.Column = c.MergeArea.Column)
+    Else
+        IsMergeTopLeftRow = True
+    End If
+End Function
+
+'========================
+' 次の書き込み行
+'========================
+Private Function NextWriteRow(ByVal ws As Worksheet) As Long
+    Dim r As Long
+    r = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If r < 4 Then r = 3
+    NextWriteRow = r + 1
+End Function
+
+'========================
+' ヘッダ設定（3行目）
+'========================
+Private Sub EnsureHeaders(ByVal ws As Worksheet)
+    ws.Cells(3, "A").Value = "コード/形態"
+    ws.Cells(3, "B").Value = "ファイル名"
+    ws.Cells(3, "C").Value = "月"
+    ws.Cells(3, "D").Value = "本部"
+    ws.Cells(3, "E").Value = "ビジネス・ユニット"
+    ws.Cells(3, "F").Value = "部"
+    ws.Cells(3, "G").Value = "課"
+    ws.Cells(3, "H").Value = "エリア"
+    ws.Cells(3, "I").Value = "店舗"
+    ws.Cells(3, "J").Value = "従業員番号"
+    ws.Cells(3, "K").Value = "氏名"
+    ws.Cells(3, "L").Value = "職位"
+    ws.Cells(3, "M").Value = "職位順位"
+End Sub
+
+'========================
+' ファイル名 → 月（◯年◯月）
+'========================
+Private Function ExtractMonthFromFileName(ByVal s As String) As String
+    Dim p As Long
+    s = NzStr(s)
+    p = InStr(s, "月")
+    If p <= 1 Then Exit Function
+    ExtractMonthFromFileName = Mid$(s, 2, p - 1)
+End Function
+
+Private Sub FillMonthAll(ByVal ws As Worksheet)
+    Dim lastR As Long, r As Long
+    lastR = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    For r = 4 To lastR
+        ws.Cells(r, "C").Value = ExtractMonthFromFileName(ws.Cells(r, "B").Value)
+    Next r
+End Sub
+
+'========================
+' 職位順位
+'========================
+Private Function PosRank(ByVal pos As String) As Variant
+    Select Case Trim$(pos)
+        Case "総括部長/本部長": PosRank = 1
+        Case "事業部長": PosRank = 2
+        Case "副本部長": PosRank = 3
+        Case "本部長代行": PosRank = 4
+        Case "部長": PosRank = 5
+        Case "企画担当部長": PosRank = 6
+        Case "センター長": PosRank = 7
+        Case "部長代行": PosRank = 8
+        Case "次長": PosRank = 9
+        Case "室長": PosRank = 10
+        Case "課長": PosRank = 11
+        Case "店長": PosRank = 12
+        Case "PS店長": PosRank = 13
+        Case "室長代行": PosRank = 14
+        Case "課長代行": PosRank = 15
+        Case "副店長": PosRank = 16
+        Case "MGR": PosRank = 17
+        Case "AMGR/CMGR": PosRank = 18
+        Case "ユニットリーダー": PosRank = 19
+        Case "チームリーダー": PosRank = 20
+        Case "サブリーダー": PosRank = 21
+        Case "ハピカンキャプテン": PosRank = 22
+        Case "一般社員": PosRank = 23
+        Case "PS社員": PosRank = 24
+        Case "派遣社員": PosRank = 25
+        Case "契約社員": PosRank = 26
+        Case "外部": PosRank = 27
+        Case Else: PosRank = ""
+    End Select
+End Function
+
+'========================
+' 配属店舗一覧：1行出力
+'========================
+Private Sub WriteRow( _
+    ws As Worksheet, fileName As String, code As String, _
+    d1 As String, d2 As String, d3 As String, d4 As String, _
+    shop As String, empNo As String, empName As String, pos As String)
+
+    If empNo = "" And empName = "" And pos = "" Then Exit Sub
+
+    Dim r As Long: r = NextWriteRow(ws)
+    ws.Cells(r, "A").Value = code
+    ws.Cells(r, "B").Value = fileName
+    ws.Cells(r, "D").Value = d1
+    ws.Cells(r, "F").Value = d2
+    ws.Cells(r, "G").Value = d3
+    ws.Cells(r, "H").Value = d4
+    ws.Cells(r, "I").Value = shop
+    ws.Cells(r, "J").Value = empNo
+    ws.Cells(r, "K").Value = empName
+    ws.Cells(r, "L").Value = pos
+    ws.Cells(r, "M").Value = PosRank(pos)
+End Sub
+
+'========================
+' メイン
+'========================
+Public Sub 取り込み実行_本社_配属店舗一覧()
+
+    Dim wsOut As Worksheet
+    Set wsOut = ActiveSheet
+    EnsureHeaders wsOut
+
+    Dim fd As FileDialog
+    Set fd = Application.FileDialog(msoFileDialogFilePicker)
+    fd.AllowMultiSelect = True
+    fd.Filters.Add "Excel", "*.xlsx;*.xlsm;*.xls"
+    If fd.Show <> -1 Then Exit Sub
+
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+
+    Dim i As Long, wb As Workbook
+    For i = 1 To fd.SelectedItems.Count
+        Set wb = Workbooks.Open(fd.SelectedItems(i), ReadOnly:=True)
+        Extract_Honsya wb, wsOut
+        Extract_Haisyoku wb, wsOut
+        wb.Close False
+    Next i
+
+    FillMonthAll wsOut
+
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    MsgBox "取り込み完了"
+
+End Sub
+
+'========================
+' 【本社】
+'========================
+Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
+
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = wb.Worksheets("本社")
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+
+    Dim r As Long, tier As Long, baseCol As Long
+    Dim dept(1 To 5) As String
+    Dim empNo As String, empName As String, pos As String
+
+    For r = 5 To ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
+        For tier = 1 To 5
+            baseCol = 7 + (tier - 1) * 5
+            dept(tier) = GetMergedText(ws.Cells(r, baseCol + 1))
+        Next tier
+
+        For tier = 1 To 5
+            baseCol = 7 + (tier - 1) * 5
+            empNo = NzStr(ws.Cells(r, baseCol + 3).Value)
+            empName = NzStr(ws.Cells(r, baseCol + 4).Value)
+            pos = NzStr(ws.Cells(r, baseCol + 2).Value)
+
+            If empNo <> "" Or empName <> "" Or pos <> "" Then
+                WriteRow wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
+                    dept(1), dept(2), dept(3), dept(4), dept(5), _
+                    empNo, empName, pos
+            End If
+        Next tier
+    Next r
+End Sub
+
+'========================
+' 【配属店舗一覧】
+'========================
+Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
+
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = wb.Worksheets("配属店舗一覧")
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+
+    Dim r As Long
+    Dim d1 As String, d2 As String, d3 As String, d4 As String
+    Dim shop As String, code As String
+
+    For r = 5 To ws.Cells(ws.Rows.Count, "AN").End(xlUp).Row
+        d1 = GetMergedText(ws.Cells(r, "Q"))
+        d2 = GetMergedText(ws.Cells(r, "W"))
+        d3 = GetMergedText(ws.Cells(r, "AC"))
+        d4 = GetMergedText(ws.Cells(r, "AI"))
+        shop = NzStr(ws.Cells(r, "AO").Value)
+
+        code = Left$(GetMergedText(ws.Cells(r, "B")), 1)
+
+        ' 通常ブロック
+        Dim blk As Long
+        For blk = 1 To 5
+            WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, shop, _
+                NzStr(ws.Cells(r, ws.Columns("AT").Column + (blk - 1) * 6).Value), _
+                NzStr(ws.Cells(r, ws.Columns("AT").Column + (blk - 1) * 6 + 1).Value), _
+                NzStr(ws.Cells(r, ws.Columns("AQ").Column + (blk - 1) * 6).Value)
+        Next blk
+
+        ' 役職者（結合セル左上のみ）
+        If IsMergeTopLeftRow(ws.Cells(r, "T")) Then _
+            WriteRow wsOut, wb.Name, code, d1, "", "", "", "", _
+                NzStr(ws.Cells(r, "T").Value), NzStr(ws.Cells(r, "U").Value), "総括部長/本部長"
+
+        If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then _
+            WriteRow wsOut, wb.Name, code, d1, d2, "", "", "", _
+                NzStr(ws.Cells(r, "Z").Value), NzStr(ws.Cells(r, "AA").Value), "部長/UL"
+
+        If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then _
+            WriteRow wsOut, wb.Name, code, d1, d2, d3, "", "", _
+                NzStr(ws.Cells(r, "AF").Value), NzStr(ws.Cells(r, "AG").Value), "AMGR/CMGR"
+
+        If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then _
+            WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, "", _
+                NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
+    Next r
+End Sub
+
 
                           
 </code></pre>
