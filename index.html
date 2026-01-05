@@ -17,118 +17,93 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-
-
-
-
-
-
-
-
-  
 Option Explicit
 
 '=========================================================
 '  職位変化者 抽出（基準月 vs 前月）
 '  前提：反映データ列
-'   C=月(例:2025年12月), J=従業員番号, K=氏名, L=職位, M=職位順位(小さいほど上位)
-'  出力：新規/既存シート「職位変化」 A4～
-'        A2に基準月を入力（例：2025年12月）
+'   C=月（Date型: 2025/12/1 等 or "2025年12月" でも可）
+'   J=従業員番号, K=氏名, L=職位, M=職位順位(小さいほど上位)
+'  出力：シート「職位変化」 A4～
+'        A2に基準月入力（例：2025年12月 でも 2025/12/1 でもOK）
 '=========================================================
 Public Sub 抽出_職位変化者_基準月vs前月()
 
     Dim wsData As Worksheet
-    Set wsData = ActiveSheet   ' ★反映データがあるシートをアクティブにして実行（必要なら固定名に変更）
+    Set wsData = ActiveSheet   ' 反映データのシートをアクティブにして実行
 
     Dim wsOut As Worksheet
     Set wsOut = GetOrCreateSheet(ThisWorkbook, "職位変化")
 
-    ' 体裁（A2に基準月）
-    wsOut.Range("A1").Value = "基準月（例：2025年12月）"
-    If Trim$(CStr(wsOut.Range("A2").Value)) = "" Then
-        wsOut.Range("A2").Value = "" ' ユーザー入力
-    End If
+    wsOut.Range("A1").Value = "基準月（例：2025年12月 or 2025/12/1）"
     wsOut.Range("B1").Value = "前月（自動）"
-
-    Dim baseMonth As String
-    baseMonth = Trim$(CStr(wsOut.Range("A2").Value))
-    If baseMonth = "" Then
-        MsgBox "職位変化シートのA2に基準月（例：2025年12月）を入力してください。", vbExclamation
-        Exit Sub
-    End If
-
-    Dim baseDt As Date
-    If Not TryParseJPMonth(baseMonth, baseDt) Then
-        MsgBox "A2の基準月の形式が不正です。例：2025年12月", vbExclamation
-        Exit Sub
-    End If
-
-    Dim prevDt As Date
-    prevDt = DateAdd("m", -1, baseDt)
-
-    Dim prevMonth As String
-    prevMonth = Format(Year(prevDt), "0000") & "年" & CStr(Month(prevDt)) & "月"
-    wsOut.Range("B2").Value = prevMonth
-
-    ' 出力ヘッダ（A3～）
     wsOut.Range("A3:H3").Value = Array("従業員番号", "氏名", "前月(月)", "前月職位", "前月順位", "基準月(月)", "基準月職位", "基準月順位")
     wsOut.Range("A4:H1048576").ClearContents
 
+    Dim baseDt As Date
+    If Not TryParseMonthCell(wsOut.Range("A2").Value, baseDt) Then
+        MsgBox "職位変化シートのA2に基準月を入力してください。（例：2025年12月 または 2025/12/1）", vbExclamation
+        Exit Sub
+    End If
+    baseDt = DateSerial(Year(baseDt), Month(baseDt), 1)
+
+    Dim prevDt As Date
+    prevDt = DateAdd("m", -1, baseDt)
+    prevDt = DateSerial(Year(prevDt), Month(prevDt), 1)
+
+    wsOut.Range("B2").Value = Format(prevDt, "yyyy年m月")
+
+    ' 最終行：従業員番号(J)基準が一番堅い
     Dim lastRow As Long
-    lastRow = wsData.Cells(wsData.Rows.Count, "A").End(xlUp).Row
+    lastRow = wsData.Cells(wsData.Rows.Count, "J").End(xlUp).Row
     If lastRow < 4 Then
-        MsgBox "データが見つかりません（4行目以降）。", vbExclamation
+        MsgBox "データが見つかりません（J列=従業員番号が4行目以降にありません）。", vbExclamation
         Exit Sub
     End If
 
-    ' dictPrev(empNo) = Array(rank, name, pos)
-    ' dictBase(empNo) = Array(rank, name, pos)
     Dim dictPrev As Object, dictBase As Object
     Set dictPrev = CreateObject("Scripting.Dictionary")
     Set dictBase = CreateObject("Scripting.Dictionary")
 
     Dim r As Long
     For r = 4 To lastRow
-        Dim m As String
-        m = Trim$(CStr(wsData.Cells(r, "C").Value)) ' 月
+        Dim rowMonthDt As Date
+        If Not TryParseMonthCell(wsData.Cells(r, "C").Value, rowMonthDt) Then GoTo ContinueRow
+        rowMonthDt = DateSerial(Year(rowMonthDt), Month(rowMonthDt), 1)
 
-        If m <> prevMonth And m <> baseMonth Then GoTo ContinueRow
+        If rowMonthDt <> prevDt And rowMonthDt <> baseDt Then GoTo ContinueRow
 
         Dim empNo As String
         empNo = Trim$(CStr(wsData.Cells(r, "J").Value))
         If empNo = "" Then GoTo ContinueRow
 
-        Dim name As String, pos As String
-        name = Trim$(CStr(wsData.Cells(r, "K").Value))
+        Dim nm As String, pos As String
+        nm = Trim$(CStr(wsData.Cells(r, "K").Value))
         pos = Trim$(CStr(wsData.Cells(r, "L").Value))
 
         Dim rankVal As Long
-        rankVal = RankOrLarge(wsData.Cells(r, "M").Value) ' 空なら大きい値扱い
+        rankVal = RankOrLarge(wsData.Cells(r, "M").Value)
 
-        If m = prevMonth Then
-            UpdateBest dictPrev, empNo, rankVal, name, pos
-        ElseIf m = baseMonth Then
-            UpdateBest dictBase, empNo, rankVal, name, pos
+        If rowMonthDt = prevDt Then
+            UpdateBest dictPrev, empNo, rankVal, nm, pos
+        ElseIf rowMonthDt = baseDt Then
+            UpdateBest dictBase, empNo, rankVal, nm, pos
         End If
 
 ContinueRow:
     Next r
 
     ' 変化者を出力
-    Dim outR As Long
-    outR = 4
-
+    Dim outR As Long: outR = 4
+    Dim allKeys As Object: Set allKeys = CreateObject("Scripting.Dictionary")
     Dim key As Variant
-    Dim allKeys As Object
-    Set allKeys = CreateObject("Scripting.Dictionary")
 
-    ' 両方のキーを統合
-    For Each key In dictPrev.Keys
-        allKeys(key) = True
-    Next key
-    For Each key In dictBase.Keys
-        allKeys(key) = True
-    Next key
+    For Each key In dictPrev.Keys: allKeys(key) = True: Next
+    For Each key In dictBase.Keys: allKeys(key) = True: Next
+
+    Dim baseLabel As String, prevLabel As String
+    baseLabel = Format(baseDt, "yyyy年m月")
+    prevLabel = Format(prevDt, "yyyy年m月")
 
     For Each key In allKeys.Keys
         Dim hasPrev As Boolean, hasBase As Boolean
@@ -143,26 +118,14 @@ ContinueRow:
             prevRank = CLng(dictPrev(key)(0))
             prevName = CStr(dictPrev(key)(1))
             prevPos = CStr(dictPrev(key)(2))
-        Else
-            prevRank = 0
-            prevName = ""
-            prevPos = ""
         End If
-
         If hasBase Then
             baseRank = CLng(dictBase(key)(0))
             baseName = CStr(dictBase(key)(1))
             basePos = CStr(dictBase(key)(2))
-        Else
-            baseRank = 0
-            baseName = ""
-            basePos = ""
         End If
 
-        ' 判定：職位が変わった（=順位 or 職位文字列が変化、もしくは片方にしかいない）
         Dim changed As Boolean
-        changed = False
-
         If Not hasPrev Or Not hasBase Then
             changed = True
         ElseIf prevRank <> baseRank Then
@@ -174,22 +137,52 @@ ContinueRow:
         If changed Then
             wsOut.Cells(outR, "A").Value = CStr(key)
             wsOut.Cells(outR, "B").Value = IIf(baseName <> "", baseName, prevName)
-            wsOut.Cells(outR, "C").Value = IIf(hasPrev, prevMonth, "")
+            wsOut.Cells(outR, "C").Value = IIf(hasPrev, prevLabel, "")
             wsOut.Cells(outR, "D").Value = prevPos
             wsOut.Cells(outR, "E").Value = IIf(hasPrev, prevRank, "")
-            wsOut.Cells(outR, "F").Value = IIf(hasBase, baseMonth, "")
+            wsOut.Cells(outR, "F").Value = IIf(hasBase, baseLabel, "")
             wsOut.Cells(outR, "G").Value = basePos
             wsOut.Cells(outR, "H").Value = IIf(hasBase, baseRank, "")
             outR = outR + 1
         End If
     Next key
 
-    MsgBox "抽出完了： " & (outR - 4) & " 件", vbInformation
+    MsgBox "抽出完了：" & (outR - 4) & "件", vbInformation
 End Sub
 
 '========================
-'  支援関数群
+'  月セルをDate(yyyy/mm/1)に解釈
+'  - Date型（2025/12/1）ならそのまま
+'  - "2025年12月" 文字列もOK
 '========================
+Private Function TryParseMonthCell(ByVal v As Variant, ByRef outDt As Date) As Boolean
+    TryParseMonthCell = False
+
+    If IsDate(v) Then
+        outDt = DateValue(v)
+        TryParseMonthCell = True
+        Exit Function
+    End If
+
+    Dim s As String
+    s = Trim$(CStr(v))
+    If s = "" Then Exit Function
+
+    Dim y As Long, m As Long
+    Dim pY As Long, pM As Long
+    pY = InStr(1, s, "年")
+    pM = InStr(1, s, "月")
+    If pY = 0 Or pM = 0 Or pM <= pY Then Exit Function
+
+    y = CLng(Val(Left$(s, pY - 1)))
+    m = CLng(Val(Mid$(s, pY + 1, pM - (pY + 1))))
+    If y < 1900 Or y > 2100 Then Exit Function
+    If m < 1 Or m > 12 Then Exit Function
+
+    outDt = DateSerial(y, m, 1)
+    TryParseMonthCell = True
+End Function
+
 Private Function GetOrCreateSheet(ByVal wb As Workbook, ByVal sheetName As String) As Worksheet
     On Error Resume Next
     Set GetOrCreateSheet = wb.Worksheets(sheetName)
@@ -200,28 +193,7 @@ Private Function GetOrCreateSheet(ByVal wb As Workbook, ByVal sheetName As Strin
     End If
 End Function
 
-Private Function TryParseJPMonth(ByVal s As String, ByRef outDt As Date) As Boolean
-    ' 例: "2025年12月" を Date(2025,12,1) に
-    Dim y As Long, m As Long
-    TryParseJPMonth = False
-
-    Dim pY As Long, pM As Long
-    pY = InStr(1, s, "年")
-    pM = InStr(1, s, "月")
-    If pY = 0 Or pM = 0 Or pM <= pY Then Exit Function
-
-    y = CLng(Val(Left$(s, pY - 1)))
-    m = CLng(Val(Mid$(s, pY + 1, pM - (pY + 1))))
-
-    If y < 1900 Or y > 2100 Then Exit Function
-    If m < 1 Or m > 12 Then Exit Function
-
-    outDt = DateSerial(y, m, 1)
-    TryParseJPMonth = True
-End Function
-
 Private Function RankOrLarge(ByVal v As Variant) As Long
-    ' M列が空なら「最上位判定の邪魔をしない」ように大きい値
     If IsError(v) Or IsEmpty(v) Or Trim$(CStr(v)) = "" Then
         RankOrLarge = 999999
     Else
@@ -231,7 +203,6 @@ End Function
 
 Private Sub UpdateBest(ByVal dict As Object, ByVal empNo As String, ByVal rankVal As Long, ByVal name As String, ByVal pos As String)
     If dict.Exists(empNo) Then
-        ' 小さい順位が上位 → より小さい方を採用
         If rankVal < CLng(dict(empNo)(0)) Then
             dict(empNo) = Array(rankVal, name, pos)
         End If
@@ -239,6 +210,9 @@ Private Sub UpdateBest(ByVal dict As Object, ByVal empNo As String, ByVal rankVa
         dict.Add empNo, Array(rankVal, name, pos)
     End If
 End Sub
+
+
+
 
                           
 </code></pre>
