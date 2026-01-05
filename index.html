@@ -17,38 +17,54 @@
 <h2>VBA Code</h2>
 <pre><code>
 
+
+
+
+
+
+
+
+  
 =LET(
-  base,$B$2,
-  prev,EDATE(base,-1),
+  base,INT($B$2),
+  prev,INT(EDATE(base,-1)),
 
   ID,Sheet1!$J$4:$J$20000,
   NM,Sheet1!$K$4:$K$20000,
-  Mon,Sheet1!$C$4:$C$20000,
+  Mon,INT(Sheet1!$C$4:$C$20000),
 
-  idsBase, UNIQUE(FILTER(ID, Mon=base)),
-  idsPrev, UNIQUE(FILTER(ID, Mon=prev)),
-  common, FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0))),
+  idsBase, IFERROR(UNIQUE(FILTER(ID, Mon=base)), ""),
+  idsPrev, IFERROR(UNIQUE(FILTER(ID, Mon=prev)), ""),
 
-  chg, FILTER(common, MAP(common, LAMBDA(e, 月別最高位ランク(e,prev)<>月別最高位ランク(e,base)))),
+  common, IF(OR(idsBase="", idsPrev=""),
+    "",
+    FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0)))
+  ),
+
+  chg, IF(common="",
+    "",
+    FILTER(common, MAP(common, LAMBDA(e, 月別最高位ランク(e,prev)<>月別最高位ランク(e,base))))
+  ),
 
   makeRow, LAMBDA(e,
     LET(
-      nameNow, XLOOKUP(e, FILTER(ID,Mon=base), FILTER(NM,Mon=base)),
+      nameNow,  XLOOKUP(e, FILTER(ID,Mon=base), FILTER(NM,Mon=base)),
       namePrev, XLOOKUP(e, FILTER(ID,Mon=prev), FILTER(NM,Mon=prev)),
 
       prevPos, TAKE(TEXTSPLIT(月別職位文字列(e,prev),"／"),,7),
       basePos, TAKE(TEXTSPLIT(月別職位文字列(e,base),"／"),,7),
 
       HSTACK(
-        e, namePrev, prevPos,   /* A:I 前月 */
-        "",                     /* J 空白 */
-        e, nameNow,  basePos    /* K:S 当月 */
+        e, namePrev, prevPos,
+        "",
+        e, nameNow,  basePos
       )
     )
   ),
 
-  MAP(chg, makeRow)
+  IF(chg="","該当なし", MAP(chg, makeRow))
 )
+
 
                           
 </code></pre>
