@@ -104,7 +104,7 @@ Private Function ExtractMonthFromFileName(ByVal fileName As String) As String
     End If
 
     ' 2文字目から (月の直前まで) → 長さ = p - 2
-    ExtractMonthFromFileName = Mid$(s, 2, p - 2)
+    ExtractMonthFromFileName = Mid$(s, 2, p - 1)
 End Function
 
 Private Sub FillMonthAsValue(ByVal wsOut As Worksheet, ByVal startRow As Long, ByVal endRow As Long)
