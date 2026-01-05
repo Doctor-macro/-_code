@@ -17,20 +17,6 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
 Option Explicit
 
 '========================
@@ -59,8 +45,18 @@ Private Function NzStr(ByVal v As Variant) As String
     End If
 End Function
 
+'========================
+'  結合セル左上行判定
+'========================
+Private Function IsMergeTopLeftRow(ByVal c As Range) As Boolean
+    If c.MergeCells Then
+        IsMergeTopLeftRow = (c.Row = c.MergeArea.Row) And (c.Column = c.MergeArea.Column)
+    Else
+        IsMergeTopLeftRow = True
+    End If
+End Function
+
 Private Function NextWriteRow(ByVal wsOut As Worksheet) As Long
-    ' 反映ファイル：4行目以降に追記（A列を基準に）
     Dim lastA As Long
     lastA = wsOut.Cells(wsOut.Rows.Count, "A").End(xlUp).Row
     If lastA < 4 Then
@@ -71,65 +67,81 @@ Private Function NextWriteRow(ByVal wsOut As Worksheet) As Long
 End Function
 
 '=========================================================
-'  メイン：複数ファイル選択 → 本社/配属店舗一覧 抽出 → 追記
+'  配属店舗一覧：1行出力共通
+'=========================================================
+Private Sub WriteHaisyokuRow( _
+    ByVal wsOut As Worksheet, _
+    ByVal fileBase As String, _
+    ByVal sheetB1 As String, _
+    ByVal dept1 As String, _
+    ByVal dept2 As String, _
+    ByVal dept3 As String, _
+    ByVal dept4 As String, _
+    ByVal shopName As String, _
+    ByVal empNo As String, _
+    ByVal label As String, _
+    ByVal pos As String)
+
+    If Trim$(empNo) = "" And Trim$(label) = "" And Trim$(pos) = "" Then Exit Sub
+
+    Dim outR As Long
+    outR = NextWriteRow(wsOut)
+
+    wsOut.Cells(outR, "A").Value = sheetB1
+    wsOut.Cells(outR, "B").Value = fileBase
+    ' C列は手動編集用
+
+    wsOut.Cells(outR, "D").Value = dept1
+    wsOut.Cells(outR, "F").Value = dept2
+    wsOut.Cells(outR, "G").Value = dept3
+    wsOut.Cells(outR, "H").Value = dept4
+
+    wsOut.Cells(outR, "I").Value = shopName
+    wsOut.Cells(outR, "J").Value = empNo
+    wsOut.Cells(outR, "K").Value = label
+    wsOut.Cells(outR, "L").Value = pos
+End Sub
+
+'=========================================================
+'  メイン
 '=========================================================
 Public Sub 取り込み実行_本社_配属店舗一覧()
     Dim wsOut As Worksheet
-    Set wsOut = ActiveSheet  ' 出力先（必要なら固定名に変更）
+    Set wsOut = ActiveSheet
 
     Dim fd As FileDialog
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
 
     With fd
-        .Title = "取り込むファイルを複数選択してください"
         .AllowMultiSelect = True
         .Filters.Clear
-        .Filters.Add "Excel Files", "*.xlsx;*.xlsm;*.xls"
+        .Filters.Add "Excel", "*.xlsx;*.xlsm;*.xls"
         If .Show <> -1 Then Exit Sub
     End With
 
-    Dim prevCalc As XlCalculation
-    prevCalc = Application.Calculation
     Application.ScreenUpdating = False
     Application.EnableEvents = False
-    Application.DisplayAlerts = False
     Application.Calculation = xlCalculationManual
 
-    Dim i As Long, path As String
+    Dim i As Long
     Dim wbSrc As Workbook
 
-    On Error GoTo SafeExit
-
     For i = 1 To fd.SelectedItems.Count
-        path = fd.SelectedItems(i)
-
-        Set wbSrc = Workbooks.Open(Filename:=path, ReadOnly:=True)
-
-        ' 本社
-        Call Extract_Honsya(wbSrc, wsOut)
-
-        ' 配属店舗一覧
-        Call Extract_Haisyoku(wbSrc, wsOut)
-
-        wbSrc.Close SaveChanges:=False
-        Set wbSrc = Nothing
+        Set wbSrc = Workbooks.Open(fd.SelectedItems(i), ReadOnly:=True)
+        Extract_Honsya wbSrc, wsOut
+        Extract_Haisyoku wbSrc, wsOut
+        wbSrc.Close False
     Next i
 
-SafeExit:
-    Application.Calculation = prevCalc
-    Application.DisplayAlerts = True
+    Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
     Application.ScreenUpdating = True
 
-    If Err.Number <> 0 Then
-        MsgBox "エラー: " & Err.Number & vbCrLf & Err.Description, vbExclamation
-    Else
-        MsgBox "取り込みが完了しました。", vbInformation
-    End If
+    MsgBox "取り込み完了"
 End Sub
 
 '========================
-'  【本社】抽出
+'  【本社】
 '========================
 Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     Dim ws As Worksheet
@@ -140,63 +152,33 @@ Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
 
     Dim lastRow As Long
     lastRow = ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
-    If lastRow < 5 Then Exit Sub
 
-    Dim r As Long
-    Dim fileBase As String
-    fileBase = wbSrc.Name
-
-    ' ★本社シート D列（A-Fのブロック内）を反映ファイルA列へ
-    Dim honsyaD As String
-
-    ' 本社：G～AE（5列×5階層）
-    ' 各階層：部門コード, 部門名称, 職位, 社員番号, 氏名
-    Dim tier As Long
+    Dim r As Long, tier As Long
     Dim baseCol As Long
     Dim deptName(1 To 5) As String
     Dim pos As String, empNo As String, empName As String
+    Dim honsyaD As String
+    Dim fileBase As String: fileBase = wbSrc.Name
 
     For r = 5 To lastRow
-        ' 本社シートのD列値（結合なら左上取得）
         honsyaD = Trim$(GetMergedText(ws.Cells(r, "D")))
 
-        ' 階層部門名称（結合セル対策）
-        For tier = 1 To 5
-            baseCol = 7 + (tier - 1) * 5 ' G=7
-            deptName(tier) = Trim$(GetMergedText(ws.Cells(r, baseCol + 1))) ' 部門名称
-        Next tier
-
-        ' どこかの階層に(職位/社員番号/氏名)が入っている → その分だけ出力
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5
+            deptName(tier) = Trim$(GetMergedText(ws.Cells(r, baseCol + 1)))
+        Next tier
 
-            pos = Trim$(NzStr(ws.Cells(r, baseCol + 2).Value))     ' 職位
-            empNo = Trim$(NzStr(ws.Cells(r, baseCol + 3).Value))   ' 社員番号
-            empName = Trim$(NzStr(ws.Cells(r, baseCol + 4).Value)) ' 氏名
+        For tier = 1 To 5
+            baseCol = 7 + (tier - 1) * 5
+            pos = NzStr(ws.Cells(r, baseCol + 2).Value)
+            empNo = NzStr(ws.Cells(r, baseCol + 3).Value)
+            empName = NzStr(ws.Cells(r, baseCol + 4).Value)
 
-            If (empNo <> "") Or (empName <> "") Or (pos <> "") Then
-                Dim outR As Long
-                outR = NextWriteRow(wsOut)
-
-                '=========================
-                ' 右に1列ずらした出力
-                '=========================
-                ' A列：本社シートのD列値
+            If empNo <> "" Or empName <> "" Or pos <> "" Then
+                Dim outR As Long: outR = NextWriteRow(wsOut)
                 wsOut.Cells(outR, "A").Value = honsyaD
-
-                ' B列：ファイル名
                 wsOut.Cells(outR, "B").Value = fileBase
-
-                ' C列：手動編集用（触らない）
-
-                ' 本社：旧(C～G) → 新(D～H)
-                wsOut.Cells(outR, "D").Value = deptName(1)
-                wsOut.Cells(outR, "E").Value = deptName(2)
-                wsOut.Cells(outR, "F").Value = deptName(3)
-                wsOut.Cells(outR, "G").Value = deptName(4)
-                wsOut.Cells(outR, "H").Value = deptName(5)
-
-                ' 本社：旧(I～K) → 新(J～L)
+                wsOut.Cells(outR, "D").Resize(1, 5).Value = deptName
                 wsOut.Cells(outR, "J").Value = empNo
                 wsOut.Cells(outR, "K").Value = empName
                 wsOut.Cells(outR, "L").Value = pos
@@ -206,7 +188,7 @@ Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
 End Sub
 
 '========================
-'  【配属店舗一覧】抽出
+'  【配属店舗一覧】
 '========================
 Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     Dim ws As Worksheet
@@ -216,90 +198,63 @@ Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
     If ws Is Nothing Then Exit Sub
 
     Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, "AN").End(xlUp).Row ' 店舗番号列
-    If lastRow < 5 Then Exit Sub
-
-    Dim fileBase As String
-    fileBase = wbSrc.Name
+    lastRow = ws.Cells(ws.Rows.Count, "AN").End(xlUp).Row
 
     Dim r As Long
-
-    ' 部門名称：Q, W, AC, AI（結合セル）
-    ' 店舗名：AO
-    ' 1行に複数人：ブロックごとに展開
-    '
-    ' 職位列：AQ, AW, BC, BI, BO
-    ' 人情報(3列)：AT-AV, AZ-BB, BF-BH, BL-BN, BR-BT
-    '   先頭：社員番号 / 2列目：店長 or 社員X / 3列目：異動日（今回は不要）
     Dim dept1 As String, dept2 As String, dept3 As String, dept4 As String
     Dim shopName As String
-    Dim sheetB As String  ' ★配属店舗一覧シートB列の値 → 反映A列へ
+    Dim sheetB1 As String
+    Dim tmpB As String
+    Dim fileBase As String: fileBase = wbSrc.Name
 
-    Dim posCols(1 To 5) As Long
-    Dim startCols(1 To 5) As Long
-    posCols(1) = Columns("AQ").Column: startCols(1) = Columns("AT").Column
-    posCols(2) = Columns("AW").Column: startCols(2) = Columns("AZ").Column
-    posCols(3) = Columns("BC").Column: startCols(3) = Columns("BF").Column
-    posCols(4) = Columns("BI").Column: startCols(4) = Columns("BL").Column
-    posCols(5) = Columns("BO").Column: startCols(5) = Columns("BR").Column
-
-    Dim blk As Long
-    Dim pos As String, empNo As String, label As String
+    Dim posCols(1 To 5) As Long, startCols(1 To 5) As Long
+    posCols(1) = ws.Columns("AQ").Column: startCols(1) = ws.Columns("AT").Column
+    posCols(2) = ws.Columns("AW").Column: startCols(2) = ws.Columns("AZ").Column
+    posCols(3) = ws.Columns("BC").Column: startCols(3) = ws.Columns("BF").Column
+    posCols(4) = ws.Columns("BI").Column: startCols(4) = ws.Columns("BL").Column
+    posCols(5) = ws.Columns("BO").Column: startCols(5) = ws.Columns("BR").Column
 
     For r = 5 To lastRow
-        dept1 = Trim$(GetMergedText(ws.Cells(r, "Q")))
-        dept2 = Trim$(GetMergedText(ws.Cells(r, "W")))
-        dept3 = Trim$(GetMergedText(ws.Cells(r, "AC")))
-        dept4 = Trim$(GetMergedText(ws.Cells(r, "AI")))
-        shopName = Trim$(NzStr(ws.Cells(r, "AO").Value))
+        dept1 = GetMergedText(ws.Cells(r, "Q"))
+        dept2 = GetMergedText(ws.Cells(r, "W"))
+        dept3 = GetMergedText(ws.Cells(r, "AC"))
+        dept4 = GetMergedText(ws.Cells(r, "AI"))
+        shopName = NzStr(ws.Cells(r, "AO").Value)
 
-        ' ★配属店舗一覧シートB列（結合セルの可能性があるので GetMergedText）
-        Dim tmpB As String
-        tmpB = Trim$(GetMergedText(ws.Cells(r, "B")))
-        
-        If Len(tmpB) > 0 Then
-            sheetB = Left$(tmpB, 1)
-        Else
-            sheetB = ""
+        tmpB = GetMergedText(ws.Cells(r, "B"))
+        sheetB1 = IIf(Len(tmpB) > 0, Left$(tmpB, 1), "")
+
+        Dim blk As Long
+        For blk = 1 To 5
+            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, dept4, shopName, _
+                NzStr(ws.Cells(r, startCols(blk)).Value), _
+                NzStr(ws.Cells(r, startCols(blk) + 1).Value), _
+                NzStr(ws.Cells(r, posCols(blk)).Value)
+        Next blk
+
+        ' 追加役職（左上行のみ）
+        If IsMergeTopLeftRow(ws.Cells(r, "T")) Then
+            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, "", "", "", "", _
+                NzStr(ws.Cells(r, "T").Value), NzStr(ws.Cells(r, "U").Value), "総括部長/本部長"
         End If
 
+        If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then
+            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, "", "", "", _
+                NzStr(ws.Cells(r, "Z").Value), NzStr(ws.Cells(r, "AA").Value), "部長/UL"
+        End If
 
-        ' ブロック(最大5)を見て、社員番号等が入っている分だけ出力
-        For blk = 1 To 5
-            pos = Trim$(NzStr(ws.Cells(r, posCols(blk)).Value))
-            empNo = Trim$(NzStr(ws.Cells(r, startCols(blk) + 0).Value)) ' 社員番号
-            label = Trim$(NzStr(ws.Cells(r, startCols(blk) + 1).Value)) ' 店長 or 社員X
+        If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then
+            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, "", "", _
+                NzStr(ws.Cells(r, "AF").Value), NzStr(ws.Cells(r, "AG").Value), "AMGR/CMGR"
+        End If
 
-            If empNo <> "" Or label <> "" Or pos <> "" Then
-                Dim outR As Long
-                outR = NextWriteRow(wsOut)
-
-                '=========================
-                ' 右に1列ずらした出力
-                '=========================
-                ' A列：配属店舗一覧シートのB列の値
-                wsOut.Cells(outR, "A").Value = sheetB
-
-                ' B列：ファイル名
-                wsOut.Cells(outR, "B").Value = fileBase
-
-                ' C列：手動編集用（触らない）
-
-                ' 配属店舗一覧：旧(C,E,F,G,H,I,J,K) → 新(D,F,G,H,I,J,K,L)
-                wsOut.Cells(outR, "D").Value = dept1
-                ' E列は指定なし（旧D列相当）→ 空でOK
-                wsOut.Cells(outR, "F").Value = dept2
-                wsOut.Cells(outR, "G").Value = dept3
-                wsOut.Cells(outR, "H").Value = dept4
-
-                wsOut.Cells(outR, "I").Value = shopName
-                wsOut.Cells(outR, "J").Value = empNo
-                wsOut.Cells(outR, "K").Value = label
-                wsOut.Cells(outR, "L").Value = pos
-            End If
-        Next blk
+        If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then
+            WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, dept4, shopName, _
+                NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
+        End If
     Next r
 End Sub
+
 
 
                           
