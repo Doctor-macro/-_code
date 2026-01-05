@@ -17,359 +17,69 @@
 <h2>VBA Code</h2>
 <pre><code>
 
-Option Explicit
-
-'========================
-'  共通：結合セル対応取得
-'========================
-Private Function GetMergedText(ByVal rng As Range) As String
-    If rng Is Nothing Then
-        GetMergedText = ""
-        Exit Function
-    End If
-
-    If rng.MergeCells Then
-        GetMergedText = CStr(rng.MergeArea.Cells(1, 1).Value)
-    Else
-        GetMergedText = CStr(rng.Value)
-    End If
-End Function
-
-Private Function NzStr(ByVal v As Variant) As String
-    If IsError(v) Then
-        NzStr = ""
-    ElseIf IsEmpty(v) Or v = "" Then
-        NzStr = ""
-    Else
-        NzStr = CStr(v)
-    End If
-End Function
-
-'========================
-'  結合セル左上行判定
-'========================
-Private Function IsMergeTopLeftRow(ByVal c As Range) As Boolean
-    If c.MergeCells Then
-        IsMergeTopLeftRow = (c.Row = c.MergeArea.Row) And (c.Column = c.MergeArea.Column)
-    Else
-        IsMergeTopLeftRow = True
-    End If
-End Function
-
-Private Function NextWriteRow(ByVal wsOut As Worksheet) As Long
-    Dim lastA As Long
-    lastA = wsOut.Cells(wsOut.Rows.Count, "A").End(xlUp).Row
-    If lastA < 4 Then
-        NextWriteRow = 4
-    Else
-        NextWriteRow = lastA + 1
-    End If
-End Function
-
-'========================
-'  ヘッダ設定（3行目 A～L）
-'========================
-Private Sub EnsureHeaders(ByVal wsOut As Worksheet)
-    wsOut.Cells(3, "A").Value = "コード/形態"
-    wsOut.Cells(3, "B").Value = "ファイル名"
-    wsOut.Cells(3, "C").Value = "月"
-    wsOut.Cells(3, "D").Value = "本部"
-    wsOut.Cells(3, "E").Value = "ビジネス・ユニット"
-    wsOut.Cells(3, "F").Value = "部"
-    wsOut.Cells(3, "G").Value = "課"
-    wsOut.Cells(3, "H").Value = "エリア"
-    wsOut.Cells(3, "I").Value = "店舗"
-    wsOut.Cells(3, "J").Value = "従業員番号"
-    wsOut.Cells(3, "K").Value = "氏名"
-    wsOut.Cells(3, "L").Value = "職位"
-End Sub
-
-'========================
-'  月（C列）を値で埋める
-'   元式: =LET(対象,B4:B...,MID(対象,2,FIND("月",対象)-1))
-'   仕様: B列の文字列の2文字目から「月」の直前までを取り出す
-'========================
-Private Function ExtractMonthFromFileName(ByVal fileName As String) As String
-    Dim s As String, p As Long
-    s = NzStr(fileName)
-    If Len(s) < 2 Then
-        ExtractMonthFromFileName = ""
-        Exit Function
-    End If
-
-    p = InStr(1, s, "月", vbTextCompare)
-    If p <= 2 Then
-        ExtractMonthFromFileName = ""
-        Exit Function
-    End If
-
-    ' 2文字目から (月の直前まで) → 長さ = p - 2
-    ExtractMonthFromFileName = Mid$(s, 2, p - 1)
-End Function
-
-Private Sub FillMonthAsValue(ByVal wsOut As Worksheet, ByVal startRow As Long, ByVal endRow As Long)
-    If endRow < startRow Then Exit Sub
-
-    Dim r As Long
-    Dim b As String
-    For r = startRow To endRow
-        b = NzStr(wsOut.Cells(r, "B").Value) ' ファイル名
-        ' C列は「値」でセット（手動入力列ではないので上書きOK）
-        wsOut.Cells(r, "C").Value = ExtractMonthFromFileName(b)
-    Next r
-End Sub
-
-'=========================================================
-'  配属店舗一覧：1行出力共通
-'=========================================================
-Private Sub WriteHaisyokuRow( _
-    ByVal wsOut As Worksheet, _
-    ByVal fileBase As String, _
-    ByVal sheetB1 As String, _
-    ByVal dept1 As String, _
-    ByVal dept2 As String, _
-    ByVal dept3 As String, _
-    ByVal dept4 As String, _
-    ByVal shopName As String, _
-    ByVal empNo As String, _
-    ByVal label As String, _
-    ByVal pos As String)
-
-    If Trim$(empNo) = "" And Trim$(label) = "" And Trim$(pos) = "" Then Exit Sub
-
-    Dim outR As Long
-    outR = NextWriteRow(wsOut)
-
-    wsOut.Cells(outR, "A").Value = sheetB1
-    wsOut.Cells(outR, "B").Value = fileBase
-    ' C列（月）は後で一括で値埋めする
-    wsOut.Cells(outR, "D").Value = dept1
-    wsOut.Cells(outR, "F").Value = dept2
-    wsOut.Cells(outR, "G").Value = dept3
-    wsOut.Cells(outR, "H").Value = dept4
-
-    wsOut.Cells(outR, "I").Value = shopName
-    wsOut.Cells(outR, "J").Value = empNo
-    wsOut.Cells(outR, "K").Value = label
-    wsOut.Cells(outR, "L").Value = pos
-End Sub
-
-'=========================================================
-'  メイン
-'=========================================================
-Public Sub 取り込み実行_本社_配属店舗一覧()
-    Dim wsOut As Worksheet
-    Set wsOut = ActiveSheet
-
-    ' 見出しを固定表示
-    EnsureHeaders wsOut
-
-    Dim fd As FileDialog
-    Set fd = Application.FileDialog(msoFileDialogFilePicker)
-
-    With fd
-        .Title = "取り込むファイルを複数選択してください"
-        .AllowMultiSelect = True
-        .Filters.Clear
-        .Filters.Add "Excel", "*.xlsx;*.xlsm;*.xls"
-        If .Show <> -1 Then Exit Sub
-    End With
-
-    Dim prevCalc As XlCalculation
-    prevCalc = Application.Calculation
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    Application.DisplayAlerts = False
-    Application.Calculation = xlCalculationManual
-
-    ' 取り込み前の最終行（あとで C列だけ今回追加分を値埋めする）
-    Dim beforeLast As Long
-    beforeLast = wsOut.Cells(wsOut.Rows.Count, "A").End(xlUp).Row
-    If beforeLast < 4 Then beforeLast = 3
-
-    Dim i As Long
-    Dim wbSrc As Workbook
-
-    On Error GoTo SafeExit
-
-    For i = 1 To fd.SelectedItems.Count
-        Set wbSrc = Workbooks.Open(fd.SelectedItems(i), ReadOnly:=True)
-        Extract_Honsya wbSrc, wsOut
-        Extract_Haisyoku wbSrc, wsOut
-        wbSrc.Close False
-    Next i
-
-    ' 今回追加された範囲の C列（月）を「値」で埋める
-    Dim afterLast As Long
-    afterLast = wsOut.Cells(wsOut.Rows.Count, "A").End(xlUp).Row
-    If afterLast >= 4 Then
-        FillMonthAsValue wsOut, beforeLast + 1, afterLast
-    End If
-
-SafeExit:
-    Application.Calculation = prevCalc
-    Application.DisplayAlerts = True
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-
-    If Err.Number <> 0 Then
-        MsgBox "エラー: " & Err.Number & vbCrLf & Err.Description, vbExclamation
-    Else
-        MsgBox "取り込みが完了しました。", vbInformation
-    End If
-End Sub
-
-'========================
-'  【本社】
-'========================
-Private Sub Extract_Honsya(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = wbSrc.Worksheets("本社")
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
-    If lastRow < 5 Then Exit Sub
-
-    Dim r As Long, tier As Long
-    Dim baseCol As Long
-    Dim deptName(1 To 5) As String
-    Dim pos As String, empNo As String, empName As String
-    Dim honsyaD As String
-    Dim fileBase As String: fileBase = wbSrc.Name
-
-    For r = 5 To lastRow
-        honsyaD = Trim$(GetMergedText(ws.Cells(r, "D")))
-
-        For tier = 1 To 5
-            baseCol = 7 + (tier - 1) * 5
-            deptName(tier) = Trim$(GetMergedText(ws.Cells(r, baseCol + 1)))
-        Next tier
-
-        For tier = 1 To 5
-            baseCol = 7 + (tier - 1) * 5
-            pos = Trim$(NzStr(ws.Cells(r, baseCol + 2).Value))
-            empNo = Trim$(NzStr(ws.Cells(r, baseCol + 3).Value))
-            empName = Trim$(NzStr(ws.Cells(r, baseCol + 4).Value))
-
-            If empNo <> "" Or empName <> "" Or pos <> "" Then
-                Dim outR As Long: outR = NextWriteRow(wsOut)
-                wsOut.Cells(outR, "A").Value = honsyaD
-                wsOut.Cells(outR, "B").Value = fileBase
-                ' C列（月）は後で一括で値埋めする
-                wsOut.Cells(outR, "D").Value = deptName(1)
-                wsOut.Cells(outR, "E").Value = deptName(2)
-                wsOut.Cells(outR, "F").Value = deptName(3)
-                wsOut.Cells(outR, "G").Value = deptName(4)
-                wsOut.Cells(outR, "H").Value = deptName(5)
-                wsOut.Cells(outR, "J").Value = empNo
-                wsOut.Cells(outR, "K").Value = empName
-                wsOut.Cells(outR, "L").Value = pos
-            End If
-        Next tier
-    Next r
-End Sub
-
-'========================
-'  【配属店舗一覧】
-'========================
-Private Sub Extract_Haisyoku(ByVal wbSrc As Workbook, ByVal wsOut As Worksheet)
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = wbSrc.Worksheets("配属店舗一覧")
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, "AN").End(xlUp).Row
-    If lastRow < 5 Then Exit Sub
-
-    Dim r As Long
-    Dim dept1 As String, dept2 As String, dept3 As String, dept4 As String
-    Dim shopName As String
-    Dim sheetB1 As String
-    Dim tmpB As String
-    Dim fileBase As String: fileBase = wbSrc.Name
-
-    Dim posCols(1 To 5) As Long, startCols(1 To 5) As Long
-    posCols(1) = ws.Columns("AQ").Column: startCols(1) = ws.Columns("AT").Column
-    posCols(2) = ws.Columns("AW").Column: startCols(2) = ws.Columns("AZ").Column
-    posCols(3) = ws.Columns("BC").Column: startCols(3) = ws.Columns("BF").Column
-    posCols(4) = ws.Columns("BI").Column: startCols(4) = ws.Columns("BL").Column
-    posCols(5) = ws.Columns("BO").Column: startCols(5) = ws.Columns("BR").Column
-
-    For r = 5 To lastRow
-        dept1 = Trim$(GetMergedText(ws.Cells(r, "Q")))
-        dept2 = Trim$(GetMergedText(ws.Cells(r, "W")))
-        dept3 = Trim$(GetMergedText(ws.Cells(r, "AC")))
-        dept4 = Trim$(GetMergedText(ws.Cells(r, "AI")))
-        shopName = Trim$(NzStr(ws.Cells(r, "AO").Value))
-
-        tmpB = Trim$(GetMergedText(ws.Cells(r, "B")))
-        If Len(tmpB) > 0 Then
-            sheetB1 = Left$(tmpB, 1)
-        Else
-            sheetB1 = ""
-        End If
-
-        ' (1) 通常ブロック：人数分
-        Dim blk As Long
-        Dim pos As String, empNo As String, label As String
-
-        For blk = 1 To 5
-            pos = Trim$(NzStr(ws.Cells(r, posCols(blk)).Value))
-            empNo = Trim$(NzStr(ws.Cells(r, startCols(blk) + 0).Value))
-            label = Trim$(NzStr(ws.Cells(r, startCols(blk) + 1).Value))
-
-            If empNo <> "" Or label <> "" Or pos <> "" Then
-                WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, dept4, shopName, empNo, label, pos
-            End If
-        Next blk
-
-        ' (2) 追加役職：結合セル左上行のみ
-        Dim empNo2 As String, name2 As String
-
-        ' 総括部長/本部長（T/U）→ Qのみ
-        If IsMergeTopLeftRow(ws.Cells(r, "T")) Then
-            empNo2 = Trim$(NzStr(ws.Cells(r, "T").Value))
-            name2 = Trim$(NzStr(ws.Cells(r, "U").Value))
-            If empNo2 <> "" Or name2 <> "" Then
-                WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, "", "", "", "", empNo2, name2, "総括部長/本部長"
-            End If
-        End If
-
-        ' 部長/UL（Z/AA）→ Q,W
-        If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then
-            empNo2 = Trim$(NzStr(ws.Cells(r, "Z").Value))
-            name2 = Trim$(NzStr(ws.Cells(r, "AA").Value))
-            If empNo2 <> "" Or name2 <> "" Then
-                WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, "", "", "", empNo2, name2, "部長/UL"
-            End If
-        End If
-
-        ' AMGR/CMGR（AF/AG）→ Q,W,AC
-        If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then
-            empNo2 = Trim$(NzStr(ws.Cells(r, "AF").Value))
-            name2 = Trim$(NzStr(ws.Cells(r, "AG").Value))
-            If empNo2 <> "" Or name2 <> "" Then
-                WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, "", "", empNo2, name2, "AMGR/CMGR"
-            End If
-        End If
-
-        ' MGR（AL/AM）→ Q,W,AC,AI（※店舗名は不要＝空）
-        If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then
-            empNo2 = Trim$(NzStr(ws.Cells(r, "AL").Value))
-            name2 = Trim$(NzStr(ws.Cells(r, "AM").Value))
-            If empNo2 <> "" Or name2 <> "" Then
-                WriteHaisyokuRow wsOut, fileBase, sheetB1, dept1, dept2, dept3, dept4, "", empNo2, name2, "MGR"
-            End If
-        End If
-    Next r
-End Sub
+=LAMBDA(p,
+  XMATCH(p,
+  {"総括部長/本部長","事業部長","副本部長","本部長代行","部長","企画担当部長","センター長","部長代行","次長","室長","課長","店長","PS店長","室長代行","課長代行","副店長","MGR","AMGR/CMGR","ユニットリーダー","チームリーダー","サブリーダー","ハピカンキャプテン","一般社員","PS社員","派遣社員","契約社員","外部"},
+  0)
+)
 
 
+  =LAMBDA(emp, m,
+  LET(
+    ID,Sheet1!$J$4:$J$20000,
+    Mon,Sheet1!$C$4:$C$20000,
+    Pos,Sheet1!$L$4:$L$20000,
+    list, UNIQUE(FILTER(Pos,(ID=emp)*(Mon=m))),
+    sorted, SORTBY(list, MAP(list, 役職ランク)),
+    TEXTJOIN("／",,sorted)
+  )
+)
+
+
+  =LAMBDA(emp, m,
+  LET(
+    ID,Sheet1!$J$4:$J$20000,
+    Mon,Sheet1!$C$4:$C$20000,
+    Pos,Sheet1!$L$4:$L$20000,
+    list, UNIQUE(FILTER(Pos,(ID=emp)*(Mon=m))),
+    MIN(MAP(list, 役職ランク))
+  )
+)
+
+
+
+
+
+  =LET(
+  base,$B$2,
+  prev,EDATE(base,-1),
+
+  ID,Sheet1!$J$4:$J$20000,
+  NM,Sheet1!$K$4:$K$20000,
+  Mon,Sheet1!$C$4:$C$20000,
+
+  idsBase, UNIQUE(FILTER(ID, Mon=base)),
+  idsPrev, UNIQUE(FILTER(ID, Mon=prev)),
+  common, FILTER(idsBase, ISNUMBER(MATCH(idsBase, idsPrev, 0))),
+
+  chg, FILTER(common, MAP(common, LAMBDA(e, 月別最高位ランク(e,prev)<>月別最高位ランク(e,base)))),
+
+  makeRow, LAMBDA(e,
+    LET(
+      nameNow, XLOOKUP(e, FILTER(ID,Mon=base), FILTER(NM,Mon=base)),
+      rPrev, TAKE(TEXTSPLIT(月別職位文字列(e,prev),"／"),,7),
+      rBase, TAKE(TEXTSPLIT(月別職位文字列(e,base),"／"),,7),
+
+      rankPrev, 月別最高位ランク(e,prev),
+      rankBase, 月別最高位ランク(e,base),
+      kubun, IF(rankBase<rankPrev,"昇格",IF(rankBase>rankPrev,"降格","")),
+
+      HSTACK(kubun, e, nameNow, rPrev, rBase)
+    )
+  ),
+
+  MAP(chg, makeRow)
+)
 
                           
 </code></pre>
