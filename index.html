@@ -21,13 +21,20 @@ Option Explicit
 
 '=========================================================
 '  職位変化者 抽出（基準月 vs 前月）
-'  前提：反映データ列
-'   C=月（Date型: 2025/12/1 等 or "2025年12月" でも可）
+'  条件：
+'   - 前月にも基準月にもデータがある人だけ対象（入職/退職は除外）
+'   - 同一月に複数職位があっても、最上位（M列最小）だけで比較
+'   - 変化がある人だけ出力（変化なしは出さない）
+'
+'  前提列（反映データ）：
+'   C=月（Date: 2025/12/1 等 or "2025年12月" でも可）
 '   J=従業員番号, K=氏名, L=職位, M=職位順位(小さいほど上位)
-'  出力：シート「職位変化」 A4～
-'        A2に基準月入力（例：2025年12月 でも 2025/12/1 でもOK）
+'
+'  出力：
+'   シート「職位変化」 A4～
+'   A2に基準月入力（例：2025年12月 でも 2025/12/1 でもOK）
 '=========================================================
-Public Sub 抽出_職位変化者_基準月vs前月()
+Public Sub 抽出_職位変化者_基準月vs前月_変化のみ_入退職除外()
 
     Dim wsData As Worksheet
     Set wsData = ActiveSheet   ' 反映データのシートをアクティブにして実行
@@ -51,9 +58,12 @@ Public Sub 抽出_職位変化者_基準月vs前月()
     prevDt = DateAdd("m", -1, baseDt)
     prevDt = DateSerial(Year(prevDt), Month(prevDt), 1)
 
-    wsOut.Range("B2").Value = Format(prevDt, "yyyy年m月")
+    Dim baseLabel As String, prevLabel As String
+    baseLabel = Format(baseDt, "yyyy年m月")
+    prevLabel = Format(prevDt, "yyyy年m月")
+    wsOut.Range("B2").Value = prevLabel
 
-    ' 最終行：従業員番号(J)基準が一番堅い
+    ' 最終行：従業員番号(J)基準
     Dim lastRow As Long
     lastRow = wsData.Cells(wsData.Rows.Count, "J").End(xlUp).Row
     If lastRow < 4 Then
@@ -61,6 +71,8 @@ Public Sub 抽出_職位変化者_基準月vs前月()
         Exit Sub
     End If
 
+    ' dictPrev(empNo) = Array(rank, name, pos)
+    ' dictBase(empNo) = Array(rank, name, pos)
     Dim dictPrev As Object, dictBase As Object
     Set dictPrev = CreateObject("Scripting.Dictionary")
     Set dictBase = CreateObject("Scripting.Dictionary")
@@ -93,61 +105,43 @@ Public Sub 抽出_職位変化者_基準月vs前月()
 ContinueRow:
     Next r
 
-    ' 変化者を出力
+    ' 対象は「前月にも基準月にもいる人」だけ
     Dim outR As Long: outR = 4
-    Dim allKeys As Object: Set allKeys = CreateObject("Scripting.Dictionary")
     Dim key As Variant
 
-    For Each key In dictPrev.Keys: allKeys(key) = True: Next
-    For Each key In dictBase.Keys: allKeys(key) = True: Next
+    For Each key In dictPrev.Keys
+        If dictBase.Exists(key) Then
+            Dim prevRank As Long, baseRank As Long
+            Dim prevName As String, baseName As String
+            Dim prevPos As String, basePos As String
 
-    Dim baseLabel As String, prevLabel As String
-    baseLabel = Format(baseDt, "yyyy年m月")
-    prevLabel = Format(prevDt, "yyyy年m月")
-
-    For Each key In allKeys.Keys
-        Dim hasPrev As Boolean, hasBase As Boolean
-        hasPrev = dictPrev.Exists(key)
-        hasBase = dictBase.Exists(key)
-
-        Dim prevRank As Long, baseRank As Long
-        Dim prevName As String, baseName As String
-        Dim prevPos As String, basePos As String
-
-        If hasPrev Then
             prevRank = CLng(dictPrev(key)(0))
             prevName = CStr(dictPrev(key)(1))
             prevPos = CStr(dictPrev(key)(2))
-        End If
-        If hasBase Then
+
             baseRank = CLng(dictBase(key)(0))
             baseName = CStr(dictBase(key)(1))
             basePos = CStr(dictBase(key)(2))
-        End If
 
-        Dim changed As Boolean
-        If Not hasPrev Or Not hasBase Then
-            changed = True
-        ElseIf prevRank <> baseRank Then
-            changed = True
-        ElseIf prevPos <> basePos Then
-            changed = True
-        End If
+            ' ★変化ありのみ出力（変化なしは出さない）
+            Dim changed As Boolean
+            changed = (prevRank <> baseRank) Or (prevPos <> basePos)
 
-        If changed Then
-            wsOut.Cells(outR, "A").Value = CStr(key)
-            wsOut.Cells(outR, "B").Value = IIf(baseName <> "", baseName, prevName)
-            wsOut.Cells(outR, "C").Value = IIf(hasPrev, prevLabel, "")
-            wsOut.Cells(outR, "D").Value = prevPos
-            wsOut.Cells(outR, "E").Value = IIf(hasPrev, prevRank, "")
-            wsOut.Cells(outR, "F").Value = IIf(hasBase, baseLabel, "")
-            wsOut.Cells(outR, "G").Value = basePos
-            wsOut.Cells(outR, "H").Value = IIf(hasBase, baseRank, "")
-            outR = outR + 1
+            If changed Then
+                wsOut.Cells(outR, "A").Value = CStr(key)
+                wsOut.Cells(outR, "B").Value = IIf(baseName <> "", baseName, prevName)
+                wsOut.Cells(outR, "C").Value = prevLabel
+                wsOut.Cells(outR, "D").Value = prevPos
+                wsOut.Cells(outR, "E").Value = prevRank
+                wsOut.Cells(outR, "F").Value = baseLabel
+                wsOut.Cells(outR, "G").Value = basePos
+                wsOut.Cells(outR, "H").Value = baseRank
+                outR = outR + 1
+            End If
         End If
     Next key
 
-    MsgBox "抽出完了：" & (outR - 4) & "件", vbInformation
+    MsgBox "抽出完了：" & (outR - 4) & "件（変化あり・入退職除外）", vbInformation
 End Sub
 
 '========================
@@ -201,6 +195,7 @@ Private Function RankOrLarge(ByVal v As Variant) As Long
     End If
 End Function
 
+' 同一月・同一人物で最上位（rank最小）だけ保持
 Private Sub UpdateBest(ByVal dict As Object, ByVal empNo As String, ByVal rankVal As Long, ByVal name As String, ByVal pos As String)
     If dict.Exists(empNo) Then
         If rankVal < CLng(dict(empNo)(0)) Then
