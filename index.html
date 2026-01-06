@@ -328,23 +328,25 @@ Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
                 NzStr(ws.Cells(r, ws.Columns("AT").Column + (blk - 1) * 6 + 1).Value), _
                 NzStr(ws.Cells(r, ws.Columns("AQ").Column + (blk - 1) * 6).Value)
         Next blk
-
-        ' 役職者（結合セル左上のみ）
+              
+        ' 役職者（結合セル左上のみ） ※職位は指定列の値を使う
         If IsMergeTopLeftRow(ws.Cells(r, "T")) Then _
             WriteRow wsOut, wb.Name, code, d1, "", "", "", "", _
-                NzStr(ws.Cells(r, "T").Value), NzStr(ws.Cells(r, "U").Value), "総括部長/本部長"
-
+                Trim$(GetMergedText(ws.Cells(r, "T"))), Trim$(GetMergedText(ws.Cells(r, "U"))), Trim$(GetMergedText(ws.Cells(r, "R")))
+        
         If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, "", "", "", _
-                NzStr(ws.Cells(r, "Z").Value), NzStr(ws.Cells(r, "AA").Value), "部長/UL"
-
+                Trim$(GetMergedText(ws.Cells(r, "Z"))), Trim$(GetMergedText(ws.Cells(r, "AA"))), Trim$(GetMergedText(ws.Cells(r, "X")))
+        
         If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, d3, "", "", _
-                NzStr(ws.Cells(r, "AF").Value), NzStr(ws.Cells(r, "AG").Value), "AMGR/CMGR"
-
+                Trim$(GetMergedText(ws.Cells(r, "AF"))), Trim$(GetMergedText(ws.Cells(r, "AG"))), Trim$(GetMergedText(ws.Cells(r, "AD")))
+        
         If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, "", _
-                NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
+                Trim$(GetMergedText(ws.Cells(r, "AL"))), Trim$(GetMergedText(ws.Cells(r, "AM"))), Trim$(GetMergedText(ws.Cells(r, "AJ")))
+
+
     Next r
 End Sub
 
