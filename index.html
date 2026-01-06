@@ -16,17 +16,6 @@
 <body>
 <h2>VBA Code</h2>
 <pre><code>
-
-
-
-
-
-
-
-
-
-
-
 Option Explicit
 
 '========================
@@ -86,7 +75,6 @@ Private Sub EnsureHeaders(ByVal ws As Worksheet)
     ws.Cells(3, "J").Value = "従業員番号"
     ws.Cells(3, "K").Value = "氏名"
     ws.Cells(3, "L").Value = "職位"
-    ' ★M列（職位順位）は削除
 End Sub
 
 '========================
@@ -109,7 +97,7 @@ Private Sub FillMonthAll(ByVal ws As Worksheet)
 End Sub
 
 '========================
-' 配属店舗一覧：1行出力
+' 1行出力（共通）
 '========================
 Private Sub WriteRow( _
     ws As Worksheet, fileName As String, code As String, _
@@ -129,7 +117,6 @@ Private Sub WriteRow( _
     ws.Cells(r, "J").Value = empNo
     ws.Cells(r, "K").Value = empName
     ws.Cells(r, "L").Value = pos
-    ' ★M列（職位順位）への書き込みは削除
 End Sub
 
 '========================
@@ -183,6 +170,7 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
     Dim empNo As String, empName As String, pos As String
 
     For r = 5 To ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
+
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5
             dept(tier) = GetMergedText(ws.Cells(r, baseCol + 1))
@@ -219,12 +207,12 @@ Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
     Dim shop As String, code As String
 
     For r = 5 To ws.Cells(ws.Rows.Count, "AN").End(xlUp).Row
+
         d1 = GetMergedText(ws.Cells(r, "Q"))
         d2 = GetMergedText(ws.Cells(r, "W"))
         d3 = GetMergedText(ws.Cells(r, "AC"))
         d4 = GetMergedText(ws.Cells(r, "AI"))
         shop = NzStr(ws.Cells(r, "AO").Value)
-
         code = Left$(GetMergedText(ws.Cells(r, "B")), 1)
 
         ' 通常ブロック
@@ -236,24 +224,25 @@ Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
                 NzStr(ws.Cells(r, ws.Columns("AQ").Column + (blk - 1) * 6).Value)
         Next blk
 
-        ' 役職者（結合セル左上のみ）
+        ' 役職者（結合セル左上のみ・職位も結合セル対応）
         If IsMergeTopLeftRow(ws.Cells(r, "T")) Then _
             WriteRow wsOut, wb.Name, code, d1, "", "", "", "", _
-                NzStr(ws.Cells(r, "T").Value), NzStr(ws.Cells(r, "U").Value), "総括部長/本部長"
+                Trim$(GetMergedText(ws.Cells(r, "T"))), Trim$(GetMergedText(ws.Cells(r, "U"))), Trim$(GetMergedText(ws.Cells(r, "R")))
 
         If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, "", "", "", _
-                NzStr(ws.Cells(r, "Z").Value), NzStr(ws.Cells(r, "AA").Value), "部長/UL"
+                Trim$(GetMergedText(ws.Cells(r, "Z"))), Trim$(GetMergedText(ws.Cells(r, "AA"))), Trim$(GetMergedText(ws.Cells(r, "X")))
 
         If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, d3, "", "", _
-                NzStr(ws.Cells(r, "AF").Value), NzStr(ws.Cells(r, "AG").Value), "AMGR/CMGR"
+                Trim$(GetMergedText(ws.Cells(r, "AF"))), Trim$(GetMergedText(ws.Cells(r, "AG"))), Trim$(GetMergedText(ws.Cells(r, "AD")))
 
         If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, "", _
-                NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
+                Trim$(GetMergedText(ws.Cells(r, "AL"))), Trim$(GetMergedText(ws.Cells(r, "AM"))), Trim$(GetMergedText(ws.Cells(r, "AJ")))
     Next r
 End Sub
+
 
                           
 </code></pre>
