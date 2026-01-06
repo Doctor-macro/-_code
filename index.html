@@ -18,7 +18,6 @@
 <pre><code>
 
 
-
 Option Explicit
 
 '=================================================
@@ -107,8 +106,6 @@ End Sub
 
 '=================================================
 ' 職位順位（職位順位シートから読込）
-'   職位順位!A2:A30 = 1..（数字）
-'   職位順位!B2:B30 = 職位名（文字列）
 '=================================================
 Private Function GetPosRankDict() As Object
     If Not gPosRank Is Nothing Then
@@ -138,7 +135,6 @@ Private Function GetPosRankDict() As Object
         pos = Trim$(CStr(ws.Cells(r, "B").Value))
 
         If pos <> "" And IsNumeric(rankV) Then
-            ' 同名が複数あったら先勝ち
             If Not d.Exists(pos) Then d.Add pos, CLng(rankV)
         End If
     Next r
@@ -147,7 +143,6 @@ Private Function GetPosRankDict() As Object
     Set GetPosRankDict = gPosRank
 End Function
 
-' 職位→順位（シート基準）
 Private Function PosRank(ByVal pos As String) As Variant
     Dim p As String
     p = Trim$(CStr(pos))
@@ -166,15 +161,8 @@ Private Function PosRank(ByVal pos As String) As Variant
     End If
 End Function
 
-' シート編集後に手動で再読み込みしたい場合
-Public Sub 職位順位_再読み込み()
-    Set gPosRank = Nothing
-    Call GetPosRankDict
-    MsgBox "職位順位を再読み込みしました。", vbInformation
-End Sub
-
 '========================
-' 配属店舗一覧：1行出力
+' 【配属店舗一覧】用：1行出力（元のまま）
 '========================
 Private Sub WriteRow( _
     ws As Worksheet, fileName As String, code As String, _
@@ -198,11 +186,44 @@ Private Sub WriteRow( _
 End Sub
 
 '========================
+' ★【本社】用：1行出力（列割り当てを変更）
+'   本社R列(=dept3) → 出力F列
+'   本社W列(=dept4) → 出力G列
+'   本社の他は必要最低限で埋める（D列=dept1, E列=dept2, H列=dept5）
+'========================
+Private Sub WriteRow_Honsya( _
+    ws As Worksheet, fileName As String, code As String, _
+    dept1 As String, dept2 As String, dept3 As String, dept4 As String, dept5 As String, _
+    empNo As String, empName As String, pos As String)
+
+    If empNo = "" And empName = "" And pos = "" Then Exit Sub
+
+    Dim r As Long: r = NextWriteRow(ws)
+    ws.Cells(r, "A").Value = code
+    ws.Cells(r, "B").Value = fileName
+
+    ws.Cells(r, "D").Value = dept1
+    ws.Cells(r, "E").Value = dept2
+
+    ' ★ここが要望：R→F、W→G
+    ws.Cells(r, "F").Value = dept3   ' 本社R列
+    ws.Cells(r, "G").Value = dept4   ' 本社W列
+
+    ' 残りの階層は例として H に置く（不要なら消してOK）
+    ws.Cells(r, "H").Value = dept5
+
+    ws.Cells(r, "J").Value = empNo
+    ws.Cells(r, "K").Value = empName
+    ws.Cells(r, "L").Value = pos
+    ws.Cells(r, "M").Value = PosRank(pos)
+End Sub
+
+'========================
 ' メイン
 '========================
 Public Sub 取り込み実行_本社_配属店舗一覧()
 
-    ' ★毎回、職位順位シートの最新を読む
+    ' 毎回最新読み込み
     Set gPosRank = Nothing
     Call GetPosRankDict
 
@@ -252,6 +273,8 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
     Dim empNo As String, empName As String, pos As String
 
     For r = 5 To ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
+
+        ' dept(3)=R列, dept(4)=W列（構造計算で取得）
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5
             dept(tier) = GetMergedText(ws.Cells(r, baseCol + 1))
@@ -264,7 +287,8 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
             pos = NzStr(ws.Cells(r, baseCol + 2).Value)
 
             If empNo <> "" Or empName <> "" Or pos <> "" Then
-                WriteRow wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
+                ' ★本社は専用の書き出しで列割り当てを変更
+                WriteRow_Honsya wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
                     dept(1), dept(2), dept(3), dept(4), dept(5), _
                     empNo, empName, pos
             End If
@@ -324,7 +348,6 @@ Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
     Next r
 End Sub
 
-  
 
 
                           
