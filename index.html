@@ -18,12 +18,16 @@
 <pre><code>
 
 
-Option Explicit
 
-'=================================================
-' 職位→順位の辞書（キャッシュ）
-'=================================================
-Private gPosRank As Object
+
+
+
+
+
+
+
+
+Option Explicit
 
 '========================
 ' 共通：結合セル対応
@@ -82,7 +86,7 @@ Private Sub EnsureHeaders(ByVal ws As Worksheet)
     ws.Cells(3, "J").Value = "従業員番号"
     ws.Cells(3, "K").Value = "氏名"
     ws.Cells(3, "L").Value = "職位"
-    ws.Cells(3, "M").Value = "職位順位"
+    ' ★M列（職位順位）は削除
 End Sub
 
 '========================
@@ -104,65 +108,8 @@ Private Sub FillMonthAll(ByVal ws As Worksheet)
     Next r
 End Sub
 
-'=================================================
-' 職位順位（職位順位シートから読込）
-'=================================================
-Private Function GetPosRankDict() As Object
-    If Not gPosRank Is Nothing Then
-        Set GetPosRankDict = gPosRank
-        Exit Function
-    End If
-
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = vbTextCompare
-
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("職位順位")
-    On Error GoTo 0
-
-    If ws Is Nothing Then
-        Set gPosRank = d
-        Set GetPosRankDict = gPosRank
-        Exit Function
-    End If
-
-    Dim r As Long
-    For r = 2 To 30
-        Dim rankV As Variant, pos As String
-        rankV = ws.Cells(r, "A").Value
-        pos = Trim$(CStr(ws.Cells(r, "B").Value))
-
-        If pos <> "" And IsNumeric(rankV) Then
-            If Not d.Exists(pos) Then d.Add pos, CLng(rankV)
-        End If
-    Next r
-
-    Set gPosRank = d
-    Set GetPosRankDict = gPosRank
-End Function
-
-Private Function PosRank(ByVal pos As String) As Variant
-    Dim p As String
-    p = Trim$(CStr(pos))
-    If p = "" Then
-        PosRank = ""
-        Exit Function
-    End If
-
-    Dim d As Object
-    Set d = GetPosRankDict()
-
-    If d.Exists(p) Then
-        PosRank = d(p)
-    Else
-        PosRank = ""
-    End If
-End Function
-
 '========================
-' 【配属店舗一覧】用：1行出力（元のまま）
+' 配属店舗一覧：1行出力
 '========================
 Private Sub WriteRow( _
     ws As Worksheet, fileName As String, code As String, _
@@ -182,50 +129,13 @@ Private Sub WriteRow( _
     ws.Cells(r, "J").Value = empNo
     ws.Cells(r, "K").Value = empName
     ws.Cells(r, "L").Value = pos
-    ws.Cells(r, "M").Value = PosRank(pos)
-End Sub
-
-'========================
-' ★【本社】用：1行出力（列割り当てを変更）
-'   本社R列(=dept3) → 出力F列
-'   本社W列(=dept4) → 出力G列
-'   本社の他は必要最低限で埋める（D列=dept1, E列=dept2, H列=dept5）
-'========================
-Private Sub WriteRow_Honsya( _
-    ws As Worksheet, fileName As String, code As String, _
-    dept1 As String, dept2 As String, dept3 As String, dept4 As String, dept5 As String, _
-    empNo As String, empName As String, pos As String)
-
-    If empNo = "" And empName = "" And pos = "" Then Exit Sub
-
-    Dim r As Long: r = NextWriteRow(ws)
-    ws.Cells(r, "A").Value = code
-    ws.Cells(r, "B").Value = fileName
-
-    ws.Cells(r, "D").Value = dept1
-    ws.Cells(r, "E").Value = dept2
-
-    ' ★ここが要望：R→F、W→G
-    ws.Cells(r, "F").Value = dept3   ' 本社R列
-    ws.Cells(r, "G").Value = dept4   ' 本社W列
-
-    ' 残りの階層は例として H に置く（不要なら消してOK）
-    ws.Cells(r, "H").Value = dept5
-
-    ws.Cells(r, "J").Value = empNo
-    ws.Cells(r, "K").Value = empName
-    ws.Cells(r, "L").Value = pos
-    ws.Cells(r, "M").Value = PosRank(pos)
+    ' ★M列（職位順位）への書き込みは削除
 End Sub
 
 '========================
 ' メイン
 '========================
 Public Sub 取り込み実行_本社_配属店舗一覧()
-
-    ' 毎回最新読み込み
-    Set gPosRank = Nothing
-    Call GetPosRankDict
 
     Dim wsOut As Worksheet
     Set wsOut = ActiveSheet
@@ -273,8 +183,6 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
     Dim empNo As String, empName As String, pos As String
 
     For r = 5 To ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
-
-        ' dept(3)=R列, dept(4)=W列（構造計算で取得）
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5
             dept(tier) = GetMergedText(ws.Cells(r, baseCol + 1))
@@ -287,8 +195,7 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
             pos = NzStr(ws.Cells(r, baseCol + 2).Value)
 
             If empNo <> "" Or empName <> "" Or pos <> "" Then
-                ' ★本社は専用の書き出しで列割り当てを変更
-                WriteRow_Honsya wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
+                WriteRow wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
                     dept(1), dept(2), dept(3), dept(4), dept(5), _
                     empNo, empName, pos
             End If
@@ -328,29 +235,25 @@ Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
                 NzStr(ws.Cells(r, ws.Columns("AT").Column + (blk - 1) * 6 + 1).Value), _
                 NzStr(ws.Cells(r, ws.Columns("AQ").Column + (blk - 1) * 6).Value)
         Next blk
-              
-        ' 役職者（結合セル左上のみ） ※職位は指定列の値を使う
+
+        ' 役職者（結合セル左上のみ）
         If IsMergeTopLeftRow(ws.Cells(r, "T")) Then _
             WriteRow wsOut, wb.Name, code, d1, "", "", "", "", _
-                Trim$(GetMergedText(ws.Cells(r, "T"))), Trim$(GetMergedText(ws.Cells(r, "U"))), Trim$(GetMergedText(ws.Cells(r, "R")))
-        
+                NzStr(ws.Cells(r, "T").Value), NzStr(ws.Cells(r, "U").Value), "総括部長/本部長"
+
         If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, "", "", "", _
-                Trim$(GetMergedText(ws.Cells(r, "Z"))), Trim$(GetMergedText(ws.Cells(r, "AA"))), Trim$(GetMergedText(ws.Cells(r, "X")))
-        
+                NzStr(ws.Cells(r, "Z").Value), NzStr(ws.Cells(r, "AA").Value), "部長/UL"
+
         If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, d3, "", "", _
-                Trim$(GetMergedText(ws.Cells(r, "AF"))), Trim$(GetMergedText(ws.Cells(r, "AG"))), Trim$(GetMergedText(ws.Cells(r, "AD")))
-        
+                NzStr(ws.Cells(r, "AF").Value), NzStr(ws.Cells(r, "AG").Value), "AMGR/CMGR"
+
         If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then _
             WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, "", _
-                Trim$(GetMergedText(ws.Cells(r, "AL"))), Trim$(GetMergedText(ws.Cells(r, "AM"))), Trim$(GetMergedText(ws.Cells(r, "AJ")))
-
-
+                NzStr(ws.Cells(r, "AL").Value), NzStr(ws.Cells(r, "AM").Value), "MGR"
     Next r
 End Sub
-
-
 
                           
 </code></pre>
