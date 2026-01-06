@@ -97,7 +97,8 @@ Private Sub FillMonthAll(ByVal ws As Worksheet)
 End Sub
 
 '========================
-' 1行出力（共通）
+' 【配属店舗一覧】用：1行出力（従来通り）
+'   d1→D列, d2→F列, d3→G列, d4→H列
 '========================
 Private Sub WriteRow( _
     ws As Worksheet, fileName As String, code As String, _
@@ -114,6 +115,39 @@ Private Sub WriteRow( _
     ws.Cells(r, "G").Value = d3
     ws.Cells(r, "H").Value = d4
     ws.Cells(r, "I").Value = shop
+    ws.Cells(r, "J").Value = empNo
+    ws.Cells(r, "K").Value = empName
+    ws.Cells(r, "L").Value = pos
+End Sub
+
+'========================
+' ★【本社】用：1行出力（列割り当て変更）
+'   本社：dept(3)=R列 → 出力F列
+'        dept(4)=W列 → 出力G列
+'   ※本社では「店舗」列(I)は dept(5) を入れておく（不要なら空にしてOK）
+'========================
+Private Sub WriteRow_Honsya( _
+    ws As Worksheet, fileName As String, code As String, _
+    dept1 As String, dept2 As String, dept3 As String, dept4 As String, dept5 As String, _
+    empNo As String, empName As String, pos As String)
+
+    If empNo = "" And empName = "" And pos = "" Then Exit Sub
+
+    Dim r As Long: r = NextWriteRow(ws)
+    ws.Cells(r, "A").Value = code
+    ws.Cells(r, "B").Value = fileName
+
+    ' 本部/BU はそのまま（必要なら変更してOK）
+    ws.Cells(r, "D").Value = dept1
+    ws.Cells(r, "E").Value = dept2
+
+    ' ★要望：R→F、W→G
+    ws.Cells(r, "F").Value = dept3   ' 本社R列（dept(3)）
+    ws.Cells(r, "G").Value = dept4   ' 本社W列（dept(4)）
+
+    ' 残り階層は例として I に入れる（不要なら "" にしてOK）
+    ws.Cells(r, "I").Value = dept5
+
     ws.Cells(r, "J").Value = empNo
     ws.Cells(r, "K").Value = empName
     ws.Cells(r, "L").Value = pos
@@ -171,6 +205,7 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
 
     For r = 5 To ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
 
+        ' dept(3)=R列, dept(4)=W列（構造計算で取得）
         For tier = 1 To 5
             baseCol = 7 + (tier - 1) * 5
             dept(tier) = GetMergedText(ws.Cells(r, baseCol + 1))
@@ -183,7 +218,8 @@ Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
             pos = NzStr(ws.Cells(r, baseCol + 2).Value)
 
             If empNo <> "" Or empName <> "" Or pos <> "" Then
-                WriteRow wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
+                ' ★本社は専用書き出し（R→F、W→G）
+                WriteRow_Honsya wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
                     dept(1), dept(2), dept(3), dept(4), dept(5), _
                     empNo, empName, pos
             End If
