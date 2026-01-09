@@ -16,268 +16,207 @@
 <body>
 <h2>VBA Code</h2>
 <pre><code>
+
+
+
+
+
+
+
+
+
+
 Option Explicit
 
-'========================
-' 共通：結合セル対応
-'========================
-Private Function GetMergedText(ByVal rng As Range) As String
-    If rng Is Nothing Then Exit Function
-    If rng.MergeCells Then
-        GetMergedText = CStr(rng.MergeArea.Cells(1, 1).Value)
-    Else
-        GetMergedText = CStr(rng.Value)
+'========================================================
+' 退職情報貼り付け：先月/今月の2ファイルを読み込み、値貼り付け
+'========================================================
+Public Sub 退職情報_先月今月_取込貼付()
+    Const TARGET_SHEET As String = "退職情報貼り付け"
+    Const SOURCE_SHEET As String = "管理店舗数"
+    Const SRC_START_ROW As Long = 11
+    
+    ' 取り込む列（ソース側）
+    Dim srcCols As Variant
+    srcCols = Array(2, 3, 20, 21, 22) ' B, C, T, U, V
+    
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+    
+    On Error GoTo EH
+    
+    Dim wsT As Worksheet
+    Set wsT = ThisWorkbook.Worksheets(TARGET_SHEET)
+    
+    ' 1) 既存データ消去（B-F と J-N の3行目以降だけ）
+    ClearTargetData wsT
+    
+    ' 2) 先月ファイル選択 → 読込 → B-F貼付
+    Dim pathPrev As String, ymPrev As String
+    pathPrev = PickExcelFile("先月の情報が含まれるファイルを選んでください")
+    If pathPrev = "" Then GoTo SafeExit 'キャンセル
+    
+    ymPrev = ExtractYearMonthFromFilename(pathPrev)
+    If ymPrev <> "" Then wsT.Range("B1").Value = ymPrev Else wsT.Range("B1").Value = "" '念のため
+    
+    ImportFromOneFile _
+        filePath:=pathPrev, _
+        sourceSheetName:=SOURCE_SHEET, _
+        srcStartRow:=SRC_START_ROW, _
+        srcColIndexes:=srcCols, _
+        targetSheet:=wsT, _
+        targetTopLeftCell:=wsT.Range("B3")
+    
+    ' 3) 今月ファイル選択 → 読込 → J-N貼付
+    Dim pathNow As String, ymNow As String
+    pathNow = PickExcelFile("今月の情報が含まれるファイルを選んでください")
+    If pathNow = "" Then GoTo SafeExit 'キャンセル
+    
+    ymNow = ExtractYearMonthFromFilename(pathNow)
+    If ymNow <> "" Then wsT.Range("J1").Value = ymNow Else wsT.Range("J1").Value = ""
+    
+    ImportFromOneFile _
+        filePath:=pathNow, _
+        sourceSheetName:=SOURCE_SHEET, _
+        srcStartRow:=SRC_START_ROW, _
+        srcColIndexes:=srcCols, _
+        targetSheet:=wsT, _
+        targetTopLeftCell:=wsT.Range("J3")
+    
+    MsgBox "取込が完了しました。" & vbCrLf & _
+           "先月: " & IIf(ymPrev = "", "(年月抽出失敗)", ymPrev) & vbCrLf & _
+           "今月: " & IIf(ymNow = "", "(年月抽出失敗)", ymNow), vbInformation
+    
+SafeExit:
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+    Exit Sub
+
+EH:
+    MsgBox "エラーが発生しました: " & Err.Number & vbCrLf & Err.Description, vbExclamation
+    Resume SafeExit
+End Sub
+
+'========================================================
+' 対象シートの既存データ消去（B-F / J-N の3行目以降のみ）
+'========================================================
+Private Sub ClearTargetData(ByVal wsT As Worksheet)
+    ' B-F (2-6), J-N (10-14)
+    Dim lastRow As Long
+    lastRow = wsT.Cells(wsT.Rows.Count, "B").End(xlUp).Row
+    lastRow = Application.WorksheetFunction.Max(lastRow, wsT.Cells(wsT.Rows.Count, "J").End(xlUp).Row)
+    If lastRow < 3 Then lastRow = 3
+    
+    wsT.Range("B3:F" & lastRow).ClearContents
+    wsT.Range("J3:N" & lastRow).ClearContents
+End Sub
+
+'========================================================
+' 1ファイル分の読込 → 値貼付（B,C,T,U,V を縦に揃えて出力）
+'========================================================
+Private Sub ImportFromOneFile( _
+    ByVal filePath As String, _
+    ByVal sourceSheetName As String, _
+    ByVal srcStartRow As Long, _
+    ByVal srcColIndexes As Variant, _
+    ByVal targetSheet As Worksheet, _
+    ByVal targetTopLeftCell As Range _
+)
+    Dim wbS As Workbook, wsS As Worksheet
+    Set wbS = Workbooks.Open(Filename:=filePath, ReadOnly:=True, UpdateLinks:=0)
+    On Error GoTo CloseAndRaise
+    
+    Set wsS = wbS.Worksheets(sourceSheetName)
+    
+    ' ソース最終行（B列基準。必要なら別列基準に変更可能）
+    Dim lastRow As Long
+    lastRow = wsS.Cells(wsS.Rows.Count, "B").End(xlUp).Row
+    If lastRow < srcStartRow Then
+        ' データなし → 何もしない
+        GoTo CloseAndExit
     End If
-End Function
+    
+    Dim rowCount As Long
+    rowCount = lastRow - srcStartRow + 1
+    
+    ' 出力配列（行×5列）
+    Dim outArr() As Variant
+    ReDim outArr(1 To rowCount, 1 To 5)
+    
+    Dim i As Long, c As Long, colIndex As Long
+    For c = 0 To 4
+        colIndex = CLng(srcColIndexes(c))
+        Dim v As Variant
+        v = wsS.Range(wsS.Cells(srcStartRow, colIndex), wsS.Cells(lastRow, colIndex)).Value '縦配列
+        
+        For i = 1 To rowCount
+            outArr(i, c + 1) = v(i, 1)
+        Next i
+    Next c
+    
+    ' 値貼付（関数を壊さないように、対象範囲だけ Value 代入）
+    targetTopLeftCell.Resize(rowCount, 5).Value = outArr
+    
+CloseAndExit:
+    wbS.Close SaveChanges:=False
+    Exit Sub
 
-Private Function NzStr(ByVal v As Variant) As String
-    If IsError(v) Or IsEmpty(v) Then
-        NzStr = ""
-    Else
-        NzStr = CStr(v)
-    End If
-End Function
-
-'========================
-' 結合セル左上行判定
-'========================
-Private Function IsMergeTopLeftRow(ByVal c As Range) As Boolean
-    If c.MergeCells Then
-        IsMergeTopLeftRow = (c.Row = c.MergeArea.Row And c.Column = c.MergeArea.Column)
-    Else
-        IsMergeTopLeftRow = True
-    End If
-End Function
-
-'========================
-' 次の書き込み行
-'========================
-Private Function NextWriteRow(ByVal ws As Worksheet) As Long
-    Dim r As Long
-    r = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
-    If r < 4 Then r = 3
-    NextWriteRow = r + 1
-End Function
-
-'========================
-' ヘッダ設定（3行目）
-'========================
-Private Sub EnsureHeaders(ByVal ws As Worksheet)
-    ws.Cells(3, "A").Value = "コード/形態"
-    ws.Cells(3, "B").Value = "ファイル名"
-    ws.Cells(3, "C").Value = "月"
-    ws.Cells(3, "D").Value = "本部"
-    ws.Cells(3, "E").Value = "ビジネス・ユニット"
-    ws.Cells(3, "F").Value = "部"
-    ws.Cells(3, "G").Value = "課"
-    ws.Cells(3, "H").Value = "エリア"
-    ws.Cells(3, "I").Value = "店舗"
-    ws.Cells(3, "J").Value = "従業員番号"
-    ws.Cells(3, "K").Value = "氏名"
-    ws.Cells(3, "L").Value = "職位"
+CloseAndRaise:
+    Dim eNum As Long, eDesc As String
+    eNum = Err.Number: eDesc = Err.Description
+    On Error Resume Next
+    wbS.Close SaveChanges:=False
+    On Error GoTo 0
+    Err.Raise eNum, , eDesc
 End Sub
 
-'========================
-' ファイル名 → 月（◯年◯月）
-'========================
-Private Function ExtractMonthFromFileName(ByVal s As String) As String
-    Dim p As Long
-    s = NzStr(s)
-    p = InStr(s, "月")
-    If p <= 1 Then Exit Function
-    ExtractMonthFromFileName = Mid$(s, 2, p - 1)
-End Function
-
-Private Sub FillMonthAll(ByVal ws As Worksheet)
-    Dim lastR As Long, r As Long
-    lastR = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
-    For r = 4 To lastR
-        ws.Cells(r, "C").Value = ExtractMonthFromFileName(ws.Cells(r, "B").Value)
-    Next r
-End Sub
-
-'========================
-' 【配属店舗一覧】用：1行出力（従来通り）
-'   d1→D列, d2→F列, d3→G列, d4→H列
-'========================
-Private Sub WriteRow( _
-    ws As Worksheet, fileName As String, code As String, _
-    d1 As String, d2 As String, d3 As String, d4 As String, _
-    shop As String, empNo As String, empName As String, pos As String)
-
-    If empNo = "" And empName = "" And pos = "" Then Exit Sub
-
-    Dim r As Long: r = NextWriteRow(ws)
-    ws.Cells(r, "A").Value = code
-    ws.Cells(r, "B").Value = fileName
-    ws.Cells(r, "D").Value = d1
-    ws.Cells(r, "F").Value = d2
-    ws.Cells(r, "G").Value = d3
-    ws.Cells(r, "H").Value = d4
-    ws.Cells(r, "I").Value = shop
-    ws.Cells(r, "J").Value = empNo
-    ws.Cells(r, "K").Value = empName
-    ws.Cells(r, "L").Value = pos
-End Sub
-
-'========================
-' ★【本社】用：1行出力（列割り当て変更）
-'   本社：dept(3)=R列 → 出力F列
-'        dept(4)=W列 → 出力G列
-'   ※本社では「店舗」列(I)は dept(5) を入れておく（不要なら空にしてOK）
-'========================
-Private Sub WriteRow_Honsya( _
-    ws As Worksheet, fileName As String, code As String, _
-    dept1 As String, dept2 As String, dept3 As String, dept4 As String, dept5 As String, _
-    empNo As String, empName As String, pos As String)
-
-    If empNo = "" And empName = "" And pos = "" Then Exit Sub
-
-    Dim r As Long: r = NextWriteRow(ws)
-    ws.Cells(r, "A").Value = code
-    ws.Cells(r, "B").Value = fileName
-
-    ' 本部/BU はそのまま（必要なら変更してOK）
-    ws.Cells(r, "D").Value = dept1
-    ws.Cells(r, "E").Value = dept2
-
-    ' ★要望：R→F、W→G
-    ws.Cells(r, "F").Value = dept3   ' 本社R列（dept(3)）
-    ws.Cells(r, "G").Value = dept4   ' 本社W列（dept(4)）
-
-    ' 残り階層は例として I に入れる（不要なら "" にしてOK）
-    ws.Cells(r, "I").Value = dept5
-
-    ws.Cells(r, "J").Value = empNo
-    ws.Cells(r, "K").Value = empName
-    ws.Cells(r, "L").Value = pos
-End Sub
-
-'========================
-' メイン
-'========================
-Public Sub 取り込み実行_本社_配属店舗一覧()
-
-    Dim wsOut As Worksheet
-    Set wsOut = ActiveSheet
-    EnsureHeaders wsOut
-
+'========================================================
+' ファイル選択ダイアログ（Excelファイル）
+'========================================================
+Private Function PickExcelFile(ByVal titleText As String) As String
     Dim fd As FileDialog
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
-    fd.AllowMultiSelect = True
-    fd.Filters.Clear
-    fd.Filters.Add "Excel", "*.xlsx;*.xlsm;*.xls"
-    If fd.Show <> -1 Then Exit Sub
+    
+    With fd
+        .Title = titleText
+        .AllowMultiSelect = False
+        .Filters.Clear
+        .Filters.Add "Excel Files", "*.xlsx; *.xlsm; *.xls; *.xlsb"
+        If .Show <> -1 Then
+            PickExcelFile = ""
+        Else
+            PickExcelFile = .SelectedItems(1)
+        End If
+    End With
+End Function
 
-    Application.ScreenUpdating = False
-    Application.Calculation = xlCalculationManual
-
-    Dim i As Long, wb As Workbook
-    For i = 1 To fd.SelectedItems.Count
-        Set wb = Workbooks.Open(fd.SelectedItems(i), ReadOnly:=True)
-        Extract_Honsya wb, wsOut
-        Extract_Haisyoku wb, wsOut
-        wb.Close False
-    Next i
-
-    FillMonthAll wsOut
-
-    Application.Calculation = xlCalculationAutomatic
-    Application.ScreenUpdating = True
-    MsgBox "取り込み完了"
-
-End Sub
-
-'========================
-' 【本社】
-'========================
-Private Sub Extract_Honsya(ByVal wb As Workbook, ByVal wsOut As Worksheet)
-
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = wb.Worksheets("本社")
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Dim r As Long, tier As Long, baseCol As Long
-    Dim dept(1 To 5) As String
-    Dim empNo As String, empName As String, pos As String
-
-    For r = 5 To ws.Cells(ws.Rows.Count, "G").End(xlUp).Row
-
-        ' dept(3)=R列, dept(4)=W列（構造計算で取得）
-        For tier = 1 To 5
-            baseCol = 7 + (tier - 1) * 5
-            dept(tier) = GetMergedText(ws.Cells(r, baseCol + 1))
-        Next tier
-
-        For tier = 1 To 5
-            baseCol = 7 + (tier - 1) * 5
-            empNo = NzStr(ws.Cells(r, baseCol + 3).Value)
-            empName = NzStr(ws.Cells(r, baseCol + 4).Value)
-            pos = NzStr(ws.Cells(r, baseCol + 2).Value)
-
-            If empNo <> "" Or empName <> "" Or pos <> "" Then
-                ' ★本社は専用書き出し（R→F、W→G）
-                WriteRow_Honsya wsOut, wb.Name, GetMergedText(ws.Cells(r, "D")), _
-                    dept(1), dept(2), dept(3), dept(4), dept(5), _
-                    empNo, empName, pos
-            End If
-        Next tier
-    Next r
-End Sub
-
-'========================
-' 【配属店舗一覧】
-'========================
-Private Sub Extract_Haisyoku(ByVal wb As Workbook, ByVal wsOut As Worksheet)
-
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = wb.Worksheets("配属店舗一覧")
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Dim r As Long
-    Dim d1 As String, d2 As String, d3 As String, d4 As String
-    Dim shop As String, code As String
-
-    For r = 5 To ws.Cells(ws.Rows.Count, "AN").End(xlUp).Row
-
-        d1 = GetMergedText(ws.Cells(r, "Q"))
-        d2 = GetMergedText(ws.Cells(r, "W"))
-        d3 = GetMergedText(ws.Cells(r, "AC"))
-        d4 = GetMergedText(ws.Cells(r, "AI"))
-        shop = NzStr(ws.Cells(r, "AO").Value)
-        code = Left$(GetMergedText(ws.Cells(r, "B")), 1)
-
-        ' 通常ブロック
-        Dim blk As Long
-        For blk = 1 To 5
-            WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, shop, _
-                NzStr(ws.Cells(r, ws.Columns("AT").Column + (blk - 1) * 6).Value), _
-                NzStr(ws.Cells(r, ws.Columns("AT").Column + (blk - 1) * 6 + 1).Value), _
-                NzStr(ws.Cells(r, ws.Columns("AQ").Column + (blk - 1) * 6).Value)
-        Next blk
-
-        ' 役職者（結合セル左上のみ・職位も結合セル対応）
-        If IsMergeTopLeftRow(ws.Cells(r, "T")) Then _
-            WriteRow wsOut, wb.Name, code, d1, "", "", "", "", _
-                Trim$(GetMergedText(ws.Cells(r, "T"))), Trim$(GetMergedText(ws.Cells(r, "U"))), Trim$(GetMergedText(ws.Cells(r, "R")))
-
-        If IsMergeTopLeftRow(ws.Cells(r, "Z")) Then _
-            WriteRow wsOut, wb.Name, code, d1, d2, "", "", "", _
-                Trim$(GetMergedText(ws.Cells(r, "Z"))), Trim$(GetMergedText(ws.Cells(r, "AA"))), Trim$(GetMergedText(ws.Cells(r, "X")))
-
-        If IsMergeTopLeftRow(ws.Cells(r, "AF")) Then _
-            WriteRow wsOut, wb.Name, code, d1, d2, d3, "", "", _
-                Trim$(GetMergedText(ws.Cells(r, "AF"))), Trim$(GetMergedText(ws.Cells(r, "AG"))), Trim$(GetMergedText(ws.Cells(r, "AD")))
-
-        If IsMergeTopLeftRow(ws.Cells(r, "AL")) Then _
-            WriteRow wsOut, wb.Name, code, d1, d2, d3, d4, "", _
-                Trim$(GetMergedText(ws.Cells(r, "AL"))), Trim$(GetMergedText(ws.Cells(r, "AM"))), Trim$(GetMergedText(ws.Cells(r, "AJ")))
-    Next r
-End Sub
+'========================================================
+' パスからファイル名を取り、YYYY年M月を抽出（例: ☆2025年12月～～）
+' 失敗時は空文字
+'========================================================
+Private Function ExtractYearMonthFromFilename(ByVal fullPath As String) As String
+    Dim fn As String
+    fn = Dir(fullPath)
+    
+    ' 正規表現: 4桁年 + "年" + 1-2桁月 + "月"
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    With re
+        .Pattern = "(\d{4})年(\d{1,2})月"
+        .IgnoreCase = True
+        .Global = False
+    End With
+    
+    If re.Test(fn) Then
+        Dim m As Object
+        Set m = re.Execute(fn)(0)
+        ExtractYearMonthFromFilename = m.SubMatches(0) & "年" & CInt(m.SubMatches(1)) & "月"
+    Else
+        ExtractYearMonthFromFilename = ""
+    End If
+End Function
 
 
                           
