@@ -18,14 +18,6 @@
 <pre><code>
 
 
-
-
-
-
-
-
-
-
 Option Explicit
 
 '========================================================
@@ -54,11 +46,17 @@ Public Sub 退職情報_先月今月_取込貼付()
     
     ' 2) 先月ファイル選択 → 読込 → B-F貼付
     Dim pathPrev As String, ymPrev As String
+    
+    MsgBox "先月の情報が含まれるファイルを選んでください", vbInformation
     pathPrev = PickExcelFile("先月の情報が含まれるファイルを選んでください")
     If pathPrev = "" Then GoTo SafeExit 'キャンセル
     
     ymPrev = ExtractYearMonthFromFilename(pathPrev)
-    If ymPrev <> "" Then wsT.Range("B1").Value = ymPrev Else wsT.Range("B1").Value = "" '念のため
+    If ymPrev <> "" Then
+        wsT.Range("B1").Value = ymPrev
+    Else
+        wsT.Range("B1").Value = ""
+    End If
     
     ImportFromOneFile _
         filePath:=pathPrev, _
@@ -70,11 +68,17 @@ Public Sub 退職情報_先月今月_取込貼付()
     
     ' 3) 今月ファイル選択 → 読込 → J-N貼付
     Dim pathNow As String, ymNow As String
+    
+    MsgBox "今月の情報が含まれるファイルを選んでください", vbInformation
     pathNow = PickExcelFile("今月の情報が含まれるファイルを選んでください")
     If pathNow = "" Then GoTo SafeExit 'キャンセル
     
     ymNow = ExtractYearMonthFromFilename(pathNow)
-    If ymNow <> "" Then wsT.Range("J1").Value = ymNow Else wsT.Range("J1").Value = ""
+    If ymNow <> "" Then
+        wsT.Range("J1").Value = ymNow
+    Else
+        wsT.Range("J1").Value = ""
+    End If
     
     ImportFromOneFile _
         filePath:=pathNow, _
@@ -103,7 +107,6 @@ End Sub
 ' 対象シートの既存データ消去（B-F / J-N の3行目以降のみ）
 '========================================================
 Private Sub ClearTargetData(ByVal wsT As Worksheet)
-    ' B-F (2-6), J-N (10-14)
     Dim lastRow As Long
     lastRow = wsT.Cells(wsT.Rows.Count, "B").End(xlUp).Row
     lastRow = Application.WorksheetFunction.Max(lastRow, wsT.Cells(wsT.Rows.Count, "J").End(xlUp).Row)
@@ -125,51 +128,44 @@ Private Sub ImportFromOneFile( _
     ByVal targetTopLeftCell As Range _
 )
     Dim wbS As Workbook, wsS As Worksheet
-    Set wbS = Workbooks.Open(Filename:=filePath, ReadOnly:=True, UpdateLinks:=0)
-    On Error GoTo CloseAndRaise
-    
-    Set wsS = wbS.Worksheets(sourceSheetName)
-    
-    ' ソース最終行（B列基準。必要なら別列基準に変更可能）
-    Dim lastRow As Long
-    lastRow = wsS.Cells(wsS.Rows.Count, "B").End(xlUp).Row
-    If lastRow < srcStartRow Then
-        ' データなし → 何もしない
-        GoTo CloseAndExit
-    End If
-    
-    Dim rowCount As Long
-    rowCount = lastRow - srcStartRow + 1
-    
-    ' 出力配列（行×5列）
+    Dim lastRow As Long, rowCount As Long
     Dim outArr() As Variant
-    ReDim outArr(1 To rowCount, 1 To 5)
-    
     Dim i As Long, c As Long, colIndex As Long
+    Dim v As Variant
+
+    On Error GoTo EH
+
+    Set wbS = Workbooks.Open(Filename:=filePath, ReadOnly:=True, UpdateLinks:=0)
+    Set wsS = wbS.Worksheets(sourceSheetName)
+
+    lastRow = wsS.Cells(wsS.Rows.Count, "B").End(xlUp).Row
+    If lastRow < srcStartRow Then GoTo CleanExit
+
+    rowCount = lastRow - srcStartRow + 1
+    ReDim outArr(1 To rowCount, 1 To 5)
+
     For c = 0 To 4
         colIndex = CLng(srcColIndexes(c))
-        Dim v As Variant
-        v = wsS.Range(wsS.Cells(srcStartRow, colIndex), wsS.Cells(lastRow, colIndex)).Value '縦配列
-        
+        v = wsS.Range(wsS.Cells(srcStartRow, colIndex), wsS.Cells(lastRow, colIndex)).Value
         For i = 1 To rowCount
             outArr(i, c + 1) = v(i, 1)
         Next i
     Next c
-    
-    ' 値貼付（関数を壊さないように、対象範囲だけ Value 代入）
+
     targetTopLeftCell.Resize(rowCount, 5).Value = outArr
-    
-CloseAndExit:
-    wbS.Close SaveChanges:=False
+
+CleanExit:
+    On Error Resume Next
+    If Not wbS Is Nothing Then wbS.Close SaveChanges:=False
+    On Error GoTo 0
     Exit Sub
 
-CloseAndRaise:
-    Dim eNum As Long, eDesc As String
-    eNum = Err.Number: eDesc = Err.Description
-    On Error Resume Next
-    wbS.Close SaveChanges:=False
-    On Error GoTo 0
-    Err.Raise eNum, , eDesc
+EH:
+    MsgBox "取込中にエラーが発生しました。" & vbCrLf & _
+           "ファイル: " & filePath & vbCrLf & _
+           "シート: " & sourceSheetName & vbCrLf & _
+           "Err " & Err.Number & ": " & Err.Description, vbExclamation
+    Resume CleanExit
 End Sub
 
 '========================================================
@@ -200,7 +196,6 @@ Private Function ExtractYearMonthFromFilename(ByVal fullPath As String) As Strin
     Dim fn As String
     fn = Dir(fullPath)
     
-    ' 正規表現: 4桁年 + "年" + 1-2桁月 + "月"
     Dim re As Object
     Set re = CreateObject("VBScript.RegExp")
     With re
