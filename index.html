@@ -125,18 +125,19 @@ Private Sub CollectOneRecipeSheet(ByVal wsSrc As Worksheet, ByVal wsDisp As Work
             'skip
         Else
             If Trim(flag) = "仕" Then
-                ' 仕込み展開：辞書にあればそれを出力、なければこの行だけ出力
+                ' ★まずメニューレシピ側の「仕」行を必ず出す（250/g/250 を保持）
+                WriteOneToDisplay wsDisp, outRow, menuName, flag, itemName, amount, unit, weight
+                outRow = outRow + 1
+            
+                ' ★仕込みがあるなら「中身だけ（1/2/空白行）」を追加
                 If prepDict.Exists(itemName) Then
-                    outRow = WritePrepToDisplay(wsDisp, outRow, menuName, prepDict(itemName))
-                Else
-                    WriteOneToDisplay wsDisp, outRow, menuName, flag, itemName, amount, unit, weight
-                    outRow = outRow + 1
+                    outRow = WritePrepChildrenToDisplay(wsDisp, outRow, menuName, prepDict(itemName))
                 End If
             Else
-                ' 通常行
                 WriteOneToDisplay wsDisp, outRow, menuName, flag, itemName, amount, unit, weight
                 outRow = outRow + 1
             End If
+
         End If
     Next r
 End Sub
@@ -195,6 +196,21 @@ Private Function WritePrepToDisplay(ByVal wsDisp As Worksheet, ByVal outRow As L
         outRow = outRow + 1
     Next i
     WritePrepToDisplay = outRow
+End Function
+'========================================================
+' 仕込み（Collection）の「中身だけ」を表示用へ書き出し
+'   ※Collection(1) は「仕」行なので飛ばす
+'========================================================
+Private Function WritePrepChildrenToDisplay(ByVal wsDisp As Worksheet, ByVal outRow As Long, _
+                                           ByVal menuName As String, ByVal col As Collection) As Long
+    Dim i As Long
+    For i = 2 To col.Count
+        Dim a As Variant
+        a = col(i) ' Array(flag,name,amount,unit,weight)
+        WriteOneToDisplay wsDisp, outRow, menuName, CStr(a(0)), CStr(a(1)), CStr(a(2)), CStr(a(3)), CStr(a(4))
+        outRow = outRow + 1
+    Next i
+    WritePrepChildrenToDisplay = outRow
 End Function
 
 '========================================================
