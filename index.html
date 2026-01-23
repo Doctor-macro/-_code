@@ -383,15 +383,24 @@
       alert("タイトルを入力してください");
       return;
     }
-    const newRef = push(ref(db, BOARDS));
-    const id = newRef.key;
-    await set(newRef, {
-      title: t,
-      text: "",
-      updatedAt: Date.now()
-    });
-    openBoard(id);
+  
+    try{
+      const newRef = push(ref(db, BOARDS));
+      const id = newRef.key;
+  
+      await set(newRef, {
+        title: t,
+        text: "",
+        updatedAt: Date.now()
+      });
+  
+      openBoard(id);
+    }catch(e){
+      console.error(e);
+      alert("作成に失敗しました。\n\n原因: " + (e?.message || e));
+    }
   }
+
 
   // ===== ボードを開く =====
   function openBoard(id){
