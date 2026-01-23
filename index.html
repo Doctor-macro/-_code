@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>VBA Code Share</title>
+<title>共有コード掲示板</title>
 <style>
   :root{
     --ink:#001f3f;
-    --bg:#fff;
-    --muted:#666;
-    --card:#f5f5f5;
-    --warn:#ff9800;
     --blue:#007BFF;
+    --bg:#fff;
+    --card:#f5f5f5;
+    --muted:#666;
+    --danger:#c62828;
   }
   body{
     margin:0;
@@ -34,7 +34,7 @@
     align-items:center;
   }
   .title{
-    font-weight:800;
+    font-weight:900;
     margin-right:8px;
   }
   button{
@@ -43,65 +43,110 @@
     color:var(--ink);
     border-radius:8px;
     padding:6px 10px;
-    font-weight:700;
+    font-weight:800;
     cursor:pointer;
     font-size:13px;
-  }
-  button:disabled{
-    border-color:#ccc;
-    color:#aaa;
-    cursor:not-allowed;
   }
   .btn-blue{
     background:var(--blue);
     border-color:var(--blue);
     color:#fff;
   }
+  .btn-danger{
+    border-color:var(--danger);
+    color:var(--danger);
+  }
   .hint{
+    margin-left:auto;
     color:var(--muted);
     font-size:12px;
-    margin-left:auto;
   }
-  main{
-    padding:16px;
+
+  main{ padding:16px; }
+
+  /* ===== 一覧ビュー ===== */
+  #listView{ display:none; }
+  .listHead{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:12px;
+  }
+  .search{
+    flex:1;
+    min-width:200px;
+    border:1px solid var(--ink);
+    border-radius:10px;
+    padding:8px 10px;
+    font-size:14px;
+    outline:none;
+  }
+  .boardGrid{
     display:grid;
-    grid-template-columns: 1fr 1fr;
-    gap:16px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap:12px;
   }
-  @media (max-width: 980px){
-    main{ grid-template-columns: 1fr; }
+  .card{
+    border:2px solid var(--ink);
+    border-radius:12px;
+    padding:12px;
+    background:#fff;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    cursor:pointer;
   }
+  .card:hover{ background:#fafafa; }
+  .cardTitle{
+    font-weight:900;
+    font-size:15px;
+    word-break:break-word;
+  }
+  .meta{
+    color:var(--muted);
+    font-size:12px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .empty{
+    color:var(--muted);
+    border:2px dashed #ccc;
+    border-radius:12px;
+    padding:14px;
+  }
+
+  /* ===== 編集ビュー ===== */
+  #editView{ display:none; }
   .panel{
     border:2px solid var(--ink);
     border-radius:12px;
     overflow:hidden;
     background:#fff;
-    display:flex;
-    flex-direction:column;
-    min-height: 60vh;
   }
-  .panel-head{
+  .panelHead{
     display:flex;
+    gap:8px;
     align-items:center;
     justify-content:space-between;
-    gap:8px;
     padding:10px 12px;
     border-bottom:2px solid var(--ink);
-    background:#fff;
   }
-  .panel-head b{
-    font-size:14px;
+  .panelHead b{ font-size:14px; }
+  .status{
+    color:var(--muted);
+    font-size:12px;
   }
-  .panel-body{
+  .panelBody{
     padding:12px;
     display:flex;
     flex-direction:column;
     gap:10px;
-    flex:1;
   }
   textarea{
     width:100%;
-    min-height: 42vh;
+    min-height: 60vh;
     resize: vertical;
     border:1px solid var(--ink);
     border-radius:10px;
@@ -118,13 +163,6 @@
     border-radius:10px;
     overflow:auto;
     border:1px solid #ddd;
-    flex:1;
-  }
-  code{
-    font-family: Consolas, ui-monospace, SFMono-Regular, Menlo, Monaco, "Liberation Mono", monospace;
-    font-size:13px;
-    line-height:1.45;
-    white-space: pre;
   }
   .row{
     display:flex;
@@ -132,42 +170,7 @@
     gap:8px;
     align-items:center;
   }
-  .pill{
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    border:1px solid #ddd;
-    border-radius:999px;
-    padding:6px 10px;
-    font-size:12px;
-    color:#222;
-    background:#fff;
-  }
-  .pill input{
-    border:none;
-    outline:none;
-    width: 260px;
-    max-width: 60vw;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size:12px;
-  }
-  .status{
-    font-size:12px;
-    color:var(--muted);
-  }
-  .status.warn{ color: #a85b00; }
-  .status.ok{ color: #1b7f2a; }
-  .small{
-    font-size:12px;
-    color:var(--muted);
-  }
-  .footer-note{
-    margin-top:8px;
-    padding:10px 12px;
-    border-top:1px solid #eee;
-    font-size:12px;
-    color:var(--muted);
-  }
+  .small{ color:var(--muted); font-size:12px; }
   .kbd{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     border:1px solid #ddd;
@@ -182,66 +185,59 @@
 <body>
 <header>
   <div class="toolbar">
-    <span class="title">VBA Code Share</span>
+    <span class="title">共有コード掲示板</span>
 
-    <button id="btnNewRoom" class="btn-blue">＋ 新しい共有URL</button>
-    <button id="btnCopyUrl">共有URLコピー</button>
-    <button id="btnCopyOut">出力をコピー</button>
-    <button id="btnDownload">出力を保存(.txt)</button>
-    <button id="btnFormat">簡易整形</button>
-    <button id="btnClear" title="このルームの内容も消えます">このルームをクリア</button>
+    <button id="btnHome" class="btn-blue" style="display:none">← タイトル一覧</button>
+    <button id="btnNew" class="btn-blue">＋ タイトル作成</button>
 
-    <span class="hint">GitHubアカウント不要／URLで共有（誰でも編集）</span>
+    <button id="btnCopyUrl" style="display:none">このページURLコピー</button>
+    <button id="btnCopyText" style="display:none">コードをコピー</button>
+    <button id="btnDelete" class="btn-danger" style="display:none">このタイトルを削除</button>
+
+    <span class="hint">1つのURLに全タイトル一覧 → クリックで共有編集</span>
   </div>
 </header>
 
 <main>
-  <section class="panel">
-    <div class="panel-head">
-      <b>入力（みんなで共有）</b>
-      <span class="status" id="statusIn">未接続</span>
+  <!-- 一覧 -->
+  <section id="listView">
+    <div class="listHead">
+      <input id="search" class="search" placeholder="タイトル検索（例：異動情報 / VBA / 自動出力）" />
+      <span class="small">URL末尾の <span class="kbd">?id=...</span> で直接そのタイトルを開けます</span>
     </div>
-    <div class="panel-body">
-      <div class="row">
-        <span class="pill">
-          room:
-          <input id="roomId" readonly>
-        </span>
-        <span class="small">※URLの <span class="kbd">?room=xxxx</span> が同じ人同士で共有されます</span>
-      </div>
-
-      <textarea id="input" spellcheck="false" placeholder="ここにVBAコードを貼り付け（自動保存・共有）"></textarea>
-
-      <div class="footer-note">
-        ・自動保存：入力後 800ms で保存（連打防止あり）<br>
-        ・上限：入力 50,000 文字（超えると保存しません）<br>
-        ・注意：ログイン不要のため、URLを知っている人は誰でも編集できます（荒らし対策は最低限）
-      </div>
+    <div id="boardGrid" class="boardGrid"></div>
+    <div id="empty" class="empty" style="display:none">
+      まだタイトルがありません。「＋ タイトル作成」から作ってください。
     </div>
   </section>
 
-  <section class="panel">
-    <div class="panel-head">
-      <b>出力（表示・コピー用）</b>
-      <span class="status" id="statusOut">—</span>
-    </div>
-    <div class="panel-body">
-      <pre><code id="output"></code></pre>
-      <div class="small">
-        ※ ここは表示専用。入力が更新されると自動で反映します。
+  <!-- 編集 -->
+  <section id="editView">
+    <div class="panel">
+      <div class="panelHead">
+        <b id="boardTitle">—</b>
+        <span id="status" class="status">—</span>
+      </div>
+      <div class="panelBody">
+        <div class="row">
+          <span class="small">※入力後 800ms で自動保存（全員に反映）</span>
+          <span class="small">／文字数: <span id="len">0</span></span>
+        </div>
+        <textarea id="text" spellcheck="false" placeholder="ここにVBAコードを貼り付け（共有編集）"></textarea>
+        <pre><code id="preview"></code></pre>
+        <div class="small">上はプレビュー（コピー用）。</div>
       </div>
     </div>
   </section>
 </main>
 
 <script type="module">
-  // ========= Firebase =========
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getDatabase, ref, set, onValue, serverTimestamp
+    getDatabase, ref, set, update, remove, onValue, push, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-  // ★ タイマーと同じプロジェクトを流用（あなたが貼ってくれた内容そのまま）
+  // ===== Firebase（あなたのタイマーと同じ設定を流用）=====
   const firebaseConfig = {
     apiKey: "AIzaSyCSIIPz6Q8RRH1ijLcU-SD74IWk10lt2Uk",
     authDomain: "multi-timer-share.firebaseapp.com",
@@ -255,250 +251,272 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // ========= DOM =========
-  const btnNewRoom  = document.getElementById("btnNewRoom");
-  const btnCopyUrl  = document.getElementById("btnCopyUrl");
-  const btnCopyOut  = document.getElementById("btnCopyOut");
-  const btnDownload = document.getElementById("btnDownload");
-  const btnFormat   = document.getElementById("btnFormat");
-  const btnClear    = document.getElementById("btnClear");
+  // ===== RTDB パス =====
+  const BOARDS = "boards"; // boards/{id} = {title, text, updatedAt}
 
-  const roomIdEl  = document.getElementById("roomId");
-  const inputEl   = document.getElementById("input");
-  const outputEl  = document.getElementById("output");
-  const statusIn  = document.getElementById("statusIn");
-  const statusOut = document.getElementById("statusOut");
+  // ===== DOM =====
+  const btnHome = document.getElementById("btnHome");
+  const btnNew = document.getElementById("btnNew");
+  const btnCopyUrl = document.getElementById("btnCopyUrl");
+  const btnCopyText = document.getElementById("btnCopyText");
+  const btnDelete = document.getElementById("btnDelete");
 
-  // ========= 設定 =========
-  const MAX_LEN = 50000;
-  const SAVE_DEBOUNCE_MS = 800;
-  const MIN_WRITE_GAP_MS = 1200; // 連続書き込みの間引き
-  const PATH_PREFIX = "codeRooms"; // RTDB path
+  const listView = document.getElementById("listView");
+  const editView = document.getElementById("editView");
+  const boardGrid = document.getElementById("boardGrid");
+  const empty = document.getElementById("empty");
+  const search = document.getElementById("search");
 
-  // ========= room決定 =========
-  const params = new URLSearchParams(location.search);
-  let room = params.get("room");
+  const boardTitle = document.getElementById("boardTitle");
+  const statusEl = document.getElementById("status");
+  const textEl = document.getElementById("text");
+  const previewEl = document.getElementById("preview");
+  const lenEl = document.getElementById("len");
 
-  function randRoomId(len = 16){
-    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let s = "";
-    const a = new Uint32Array(len);
-    crypto.getRandomValues(a);
-    for(let i=0;i<len;i++){
-      s += chars[a[i] % chars.length];
-    }
-    return s;
-  }
-
-  function setRoom(newRoom){
-    room = newRoom;
-    roomIdEl.value = room;
-
-    const p = new URLSearchParams(location.search);
-    p.set("room", room);
-    history.replaceState(null, "", location.pathname + "?" + p.toString());
-
-    subscribeRoom();
-    statusOut.textContent = "—";
-  }
-
-  if(!room){
-    // 初回は自動でroom作る（推測されにくい長さ）
-    setRoom(randRoomId(20));
-  }else{
-    setRoom(room);
-  }
-
-  // ========= RTDB参照 =========
-  let unsubscribed = false;
-  let lastRemoteText = "";
-  let lastLocalWriteAt = 0;
+  // ===== 状態 =====
+  let currentId = null;
+  let boardsCache = {}; // 一覧用
   let saveTimer = null;
+  const SAVE_DEBOUNCE_MS = 800;
 
-  function roomRef(){
-    return ref(db, `${PATH_PREFIX}/${room}`);
+  // ===== util =====
+  function fmtTime(ms){
+    if(!ms) return "";
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const da = String(d.getDate()).padStart(2,"0");
+    const hh = String(d.getHours()).padStart(2,"0");
+    const mm = String(d.getMinutes()).padStart(2,"0");
+    return `${y}/${m}/${da} ${hh}:${mm}`;
   }
 
-  function subscribeRoom(){
-    unsubscribed = false;
-    statusIn.textContent = "接続中…";
-    statusIn.className = "status";
+  function qs(){
+    return new URLSearchParams(location.search);
+  }
+  function setQueryId(id){
+    const p = qs();
+    if(id) p.set("id", id);
+    else p.delete("id");
+    history.pushState(null, "", location.pathname + (p.toString()?("?"+p.toString()):""));
+  }
 
-    onValue(roomRef(), snap => {
-      if(unsubscribed) return;
+  function showList(){
+    currentId = null;
+    btnHome.style.display = "none";
+    btnCopyUrl.style.display = "none";
+    btnCopyText.style.display = "none";
+    btnDelete.style.display = "none";
+    listView.style.display = "";
+    editView.style.display = "none";
+    renderList(); // キャッシュから
+  }
 
-      const val = snap.val() || {};
-      const text = typeof val.text === "string" ? val.text : "";
+  function showEdit(){
+    btnHome.style.display = "";
+    btnCopyUrl.style.display = "";
+    btnCopyText.style.display = "";
+    btnDelete.style.display = "";
+    listView.style.display = "none";
+    editView.style.display = "";
+  }
 
-      lastRemoteText = text;
+  function boardRef(id){
+    return ref(db, `${BOARDS}/${id}`);
+  }
 
-      // ローカル編集が未反映の場合に上書きしない（基本方針）
-      // ただし入力欄が空で、リモートにあるなら反映
-      if(inputEl.value !== text){
-        // 入力中の上書き事故を減らす：フォーカス中で、差分が大きい場合は触らない
-        const hasFocus = document.activeElement === inputEl;
-        if(!hasFocus || inputEl.value === "" || inputEl.value === lastRemoteText){
-          inputEl.value = text;
-        }
-      }
+  function escapeHtml(s){
+    return (s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+  }
 
-      renderOutput(text);
-      statusIn.textContent = "接続OK";
-      statusIn.className = "status ok";
-    }, err => {
-      statusIn.textContent = "接続エラー";
-      statusIn.className = "status warn";
-      console.error(err);
+  function renderPreview(text){
+    previewEl.textContent = text || "";
+    lenEl.textContent = String((text||"").length);
+  }
+
+  // ===== 一覧レンダリング =====
+  function renderList(){
+    const q = (search.value || "").trim().toLowerCase();
+    const entries = Object.entries(boardsCache || {})
+      .map(([id, b]) => ({ id, ...(b||{}) }))
+      .filter(x => x && typeof x.title === "string" && x.title.trim() !== "");
+
+    // 新しい順（updatedAtが無い場合は0）
+    entries.sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
+
+    const filtered = q
+      ? entries.filter(x => (x.title||"").toLowerCase().includes(q))
+      : entries;
+
+    boardGrid.innerHTML = "";
+    empty.style.display = filtered.length ? "none" : "";
+
+    filtered.forEach(item => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const title = item.title || "(無題)";
+      const text = typeof item.text === "string" ? item.text : "";
+      const lines = text ? text.split(/\r?\n/).length : 0;
+      const chars = text.length;
+
+      card.innerHTML = `
+        <div class="cardTitle">${escapeHtml(title)}</div>
+        <div class="meta">
+          <span>更新: ${escapeHtml(fmtTime(item.updatedAt))}</span>
+          <span>${chars.toLocaleString()} 文字 / ${lines.toLocaleString()} 行</span>
+        </div>
+      `;
+
+      card.addEventListener("click", () => openBoard(item.id));
+      boardGrid.appendChild(card);
     });
   }
 
-  function renderOutput(text){
-    outputEl.textContent = text;
-    const len = text.length;
-    statusOut.textContent = `${len.toLocaleString()} 文字`;
-    statusOut.className = "status" + (len > MAX_LEN ? " warn" : "");
-  }
-
-  // ========= 保存 =========
-  async function saveNow(text){
-    const now = Date.now();
-    if(now - lastLocalWriteAt < MIN_WRITE_GAP_MS){
-      // 間引き（次のデバウンスで保存される）
+  // ===== タイトル作成 =====
+  async function createBoard(){
+    const title = prompt("タイトルを入力してください（例：異動情報を自動出力するVBAコード）");
+    if(title === null) return;
+    const t = title.trim();
+    if(!t){
+      alert("タイトルを入力してください");
       return;
     }
-    lastLocalWriteAt = now;
-
-    await set(roomRef(), {
-      text,
-      updatedAt: serverTimestamp()
+    const newRef = push(ref(db, BOARDS));
+    const id = newRef.key;
+    await set(newRef, {
+      title: t,
+      text: "",
+      updatedAt: Date.now()
     });
-
-    statusIn.textContent = "保存しました";
-    statusIn.className = "status ok";
-    setTimeout(() => {
-      if(statusIn.textContent === "保存しました"){
-        statusIn.textContent = "接続OK";
-        statusIn.className = "status ok";
-      }
-    }, 900);
+    openBoard(id);
   }
 
+  // ===== ボードを開く =====
+  function openBoard(id){
+    currentId = id;
+    setQueryId(id);
+    showEdit();
+    statusEl.textContent = "接続中…";
+
+    // 購読（そのidだけ）
+    onValue(boardRef(id), snap => {
+      const val = snap.val() || {};
+      const title = val.title || "(無題)";
+      const text = typeof val.text === "string" ? val.text : "";
+
+      boardTitle.textContent = title;
+
+      // 編集中の上書き事故を減らす：フォーカス中は基本上書きしない（荒らし対策無視の前提で最低限だけ）
+      const hasFocus = document.activeElement === textEl;
+      if(!hasFocus && textEl.value !== text){
+        textEl.value = text;
+      }
+      renderPreview(textEl.value);
+
+      statusEl.textContent = "接続OK";
+    }, err => {
+      console.error(err);
+      statusEl.textContent = "接続エラー";
+    });
+  }
+
+  // ===== 保存（自動） =====
   function scheduleSave(){
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
-      const text = inputEl.value ?? "";
-      if(text.length > MAX_LEN){
-        statusIn.textContent = `文字数上限超え（${MAX_LEN.toLocaleString()}文字まで）`;
-        statusIn.className = "status warn";
-        return;
-      }
+      if(!currentId) return;
+      const text = textEl.value || "";
       try{
-        await saveNow(text);
+        statusEl.textContent = "保存中…";
+        await update(boardRef(currentId), {
+          text,
+          updatedAt: Date.now()
+        });
+        statusEl.textContent = "保存しました";
+        setTimeout(() => {
+          if(statusEl.textContent === "保存しました") statusEl.textContent = "接続OK";
+        }, 800);
       }catch(e){
-        statusIn.textContent = "保存エラー";
-        statusIn.className = "status warn";
         console.error(e);
+        statusEl.textContent = "保存エラー";
       }
     }, SAVE_DEBOUNCE_MS);
   }
 
-  inputEl.addEventListener("input", () => {
-    renderOutput(inputEl.value);
+  textEl.addEventListener("input", () => {
+    renderPreview(textEl.value);
     scheduleSave();
   });
 
-  // ========= 便利機能 =========
-  function currentShareUrl(){
-    return location.origin + location.pathname + "?room=" + encodeURIComponent(room);
-  }
+  // ===== ボタン =====
+  btnNew.addEventListener("click", createBoard);
+
+  btnHome.addEventListener("click", () => {
+    setQueryId(null);
+    showList();
+  });
 
   btnCopyUrl.addEventListener("click", async () => {
+    const url = location.href;
     try{
-      await navigator.clipboard.writeText(currentShareUrl());
-      statusIn.textContent = "共有URLをコピーしました";
-      statusIn.className = "status ok";
+      await navigator.clipboard.writeText(url);
+      statusEl.textContent = "URLをコピーしました";
+      setTimeout(() => statusEl.textContent = "接続OK", 800);
     }catch{
-      prompt("コピーできない場合は手動でコピーしてください", currentShareUrl());
+      prompt("コピーできない場合は手動でコピーしてください", url);
     }
   });
 
-  btnCopyOut.addEventListener("click", async () => {
-    const text = outputEl.textContent || "";
+  btnCopyText.addEventListener("click", async () => {
+    const text = textEl.value || "";
     try{
       await navigator.clipboard.writeText(text);
-      statusOut.textContent = "コピーしました";
-      statusOut.className = "status ok";
-      setTimeout(() => renderOutput(inputEl.value), 800);
+      statusEl.textContent = "コードをコピーしました";
+      setTimeout(() => statusEl.textContent = "接続OK", 800);
     }catch{
       alert("コピーに失敗しました（ブラウザ制限の可能性）");
     }
   });
 
-  btnDownload.addEventListener("click", () => {
-    const text = outputEl.textContent || "";
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `vba_${room}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
-
-  btnClear.addEventListener("click", async () => {
-    if(!confirm("このルームの内容を空にします。よろしいですか？（共有相手にも反映されます）")) return;
-    inputEl.value = "";
-    renderOutput("");
+  btnDelete.addEventListener("click", async () => {
+    if(!currentId) return;
+    const name = boardTitle.textContent || "このタイトル";
+    if(!confirm(`「${name}」を削除しますか？`)) return;
     try{
-      await saveNow("");
+      await remove(boardRef(currentId));
+      setQueryId(null);
+      showList();
     }catch(e){
-      statusIn.textContent = "保存エラー";
-      statusIn.className = "status warn";
       console.error(e);
+      alert("削除に失敗しました");
     }
   });
 
-  btnNewRoom.addEventListener("click", () => {
-    // 新しい共有URL（今の内容は引き継がない）
-    setRoom(randRoomId(20));
-    inputEl.value = "";
-    renderOutput("");
-    // 初期保存
-    scheduleSave();
+  // ===== 一覧購読（全員が全部見える）=====
+  onValue(ref(db, BOARDS), snap => {
+    boardsCache = snap.val() || {};
+    if(!currentId){
+      renderList();
+    }
   });
 
-  // ========= 簡易整形（安全な範囲） =========
-  function simpleFormatVba(text){
-    // 1) 末尾空白を削除
-    const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
-    const trimmed = lines.map(l => l.replace(/[ \t]+$/g, ""));
+  search.addEventListener("input", renderList);
 
-    // 2) 連続空行を最大2行に
-    const out = [];
-    let blankRun = 0;
-    for(const l of trimmed){
-      if(l.trim() === ""){
-        blankRun++;
-        if(blankRun <= 2) out.push("");
-      }else{
-        blankRun = 0;
-        out.push(l);
-      }
-    }
-    return out.join("\n").trimEnd() + "\n";
+  // ===== 初期表示（?id= があれば直接開く）=====
+  window.addEventListener("popstate", () => {
+    const id = qs().get("id");
+    if(id) openBoard(id);
+    else showList();
+  });
+
+  const startId = qs().get("id");
+  if(startId){
+    openBoard(startId);
+  }else{
+    showList();
   }
-
-  btnFormat.addEventListener("click", () => {
-    const before = inputEl.value || "";
-    const after  = simpleFormatVba(before);
-    if(after === before) return;
-    inputEl.value = after;
-    renderOutput(after);
-    scheduleSave();
-  });
-
-  // 初期表示
-  roomIdEl.value = room;
-  renderOutput(inputEl.value || "");
 </script>
 </body>
 </html>
