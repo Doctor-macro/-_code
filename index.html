@@ -64,18 +64,21 @@
 
   main{ padding:16px; }
 
-  /* デバッグ表示（必要なければ後で消してOK） */
+  /* 常に見えるデバッグ枠（まずここが出るかで判定） */
   #debugBox{
     white-space:pre-wrap;
     font-family:Consolas, ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
     font-size:12px;
     color:#b00020;
-    padding:8px 0 14px;
-    display:none; /* ←通常は非表示。エラーが出たら自動で表示 */
+    padding:10px 12px;
+    border:2px dashed #f3b5b5;
+    border-radius:10px;
+    background:#fffafa;
+    margin-bottom:12px;
   }
 
   /* ===== 一覧ビュー ===== */
-  #listView{ display:none; }
+  #listView{ display:block; }  /* ← JSが死んでも最低限表示される */
   .listHead{
     display:flex;
     gap:8px;
@@ -209,8 +212,7 @@
 </header>
 
 <main>
-  <!-- デバッグ枠（エラーが出たら表示される） -->
-  <div id="debugBox"></div>
+  <div id="debugBox">BOOT: まだJSが動いているか確認中…</div>
 
   <!-- 一覧 -->
   <section id="listView">
@@ -219,8 +221,8 @@
       <span class="small">URL末尾の <span class="kbd">?id=...</span> で直接そのタイトルを開けます</span>
     </div>
     <div id="boardGrid" class="boardGrid"></div>
-    <div id="empty" class="empty" style="display:none">
-      まだタイトルがありません。「＋ タイトル作成」から作ってください。
+    <div id="empty" class="empty">
+      ※もしここから先が変化しない場合、JS（type="module"）が動いていません。
     </div>
   </section>
 
@@ -244,26 +246,43 @@
   </section>
 </main>
 
-<script type="module">
-  // ========= デバッグ（エラーが出たら画面に出す） =========
+<!-- ★ module が死んでも動く “外側デバッグ” -->
+<script>
   const debugBox = document.getElementById("debugBox");
-  function dbg(...a){
-    const msg = a.map(x => typeof x === "string" ? x : (x?.message || JSON.stringify(x))).join(" ");
-    console.log("[DBG]", ...a);
-    if(debugBox){
-      debugBox.style.display = "";
-      debugBox.textContent += msg + "\n";
-    }
+  function dbg(msg){
+    console.log("[DBG]", msg);
+    debugBox.textContent += "\n" + msg;
   }
-  window.addEventListener("error", (e) => dbg("JS ERROR:", e.message, e.filename, "line", e.lineno));
-  window.addEventListener("unhandledrejection", (e) => dbg("PROMISE ERROR:", e.reason?.message || e.reason));
-  console.log("[DBG] script start");
 
-  // ========= Firebase =========
+  dbg("BOOT OK: 通常scriptは動いています（=HTML反映はされています）");
+
+  window.addEventListener("error", (e) => dbg("GLOBAL ERROR: " + e.message));
+  window.addEventListener("unhandledrejection", (e) => dbg("GLOBAL PROMISE ERROR: " + (e.reason && e.reason.message ? e.reason.message : e.reason)));
+
+  // 2秒待って module 側が起動しなければ警告
+  setTimeout(() => {
+    if (!window.__MODULE_OK__) {
+      dbg("MODULE NG: type='module' が起動していません。");
+      dbg("原因候補: import失敗 / CDNブロック / 構文エラー / 古いキャッシュ");
+      dbg("対策: Ctrl+F5 / URLに ?v=3 を付ける / DevToolsのConsole/Networkを見る");
+    }
+  }, 2000);
+</script>
+
+<script type="module">
+  // module が起動したらまずフラグを立てる（これが出ないなら import以前に死んでる）
+  window.__MODULE_OK__ = true;
+
+  // module 内でのログも外側に出す
+  const debugBox = document.getElementById("debugBox");
+  const mdbg = (msg) => { console.log("[MDBG]", msg); debugBox.textContent += "\n" + msg; };
+  mdbg("MODULE OK: module script 起動しました");
+
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, set, update, remove, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-  // ===== Firebase（あなたの code-share プロジェクト）=====
+  mdbg("IMPORT OK: firebase modules 読み込み成功");
+
   const firebaseConfig = {
     apiKey: "AIzaSyB4F-EkDoTZWj_-RE4CZ_mvk44YkgOU888",
     authDomain: "code-share-ab1b4.firebaseapp.com",
@@ -276,12 +295,10 @@
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
-  console.log("[DBG] firebase init ok", firebaseConfig.projectId);
+  mdbg("FIREBASE OK: init " + firebaseConfig.projectId);
 
-  // ===== RTDB パス（Firebaseデータ画面に合わせる）=====
   const BOARDS = "groups_public_code";
 
-  // ===== DOM =====
   const btnHome = document.getElementById("btnHome");
   const btnNew = document.getElementById("btnNew");
   const btnCopyUrl = document.getElementById("btnCopyUrl");
@@ -300,13 +317,11 @@
   const previewEl = document.getElementById("preview");
   const lenEl = document.getElementById("len");
 
-  // ===== 状態 =====
   let currentId = null;
-  let boardsCache = {}; // 一覧用
+  let boardsCache = {};
   let saveTimer = null;
   const SAVE_DEBOUNCE_MS = 800;
 
-  // ===== util =====
   function fmtTime(ms){
     if(!ms) return "";
     const d = new Date(ms);
@@ -317,10 +332,7 @@
     const mm = String(d.getMinutes()).padStart(2,"0");
     return `${y}/${m}/${da} ${hh}:${mm}`;
   }
-
-  function qs(){
-    return new URLSearchParams(location.search);
-  }
+  function qs(){ return new URLSearchParams(location.search); }
   function setQueryId(id){
     const p = qs();
     if(id) p.set("id", id);
@@ -338,7 +350,6 @@
     editView.style.display = "none";
     renderList();
   }
-
   function showEdit(){
     btnHome.style.display = "";
     btnCopyUrl.style.display = "";
@@ -347,23 +358,17 @@
     listView.style.display = "none";
     editView.style.display = "";
   }
-
-  function boardRef(id){
-    return ref(db, `${BOARDS}/${id}`);
-  }
-
+  function boardRef(id){ return ref(db, `${BOARDS}/${id}`); }
   function escapeHtml(s){
     return (s ?? "").replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
   }
-
   function renderPreview(text){
     previewEl.textContent = text || "";
     lenEl.textContent = String((text||"").length);
   }
 
-  // ===== 一覧レンダリング =====
   function renderList(){
     const q = (search.value || "").trim().toLowerCase();
     const entries = Object.entries(boardsCache || {})
@@ -371,10 +376,7 @@
       .filter(x => x && typeof x.title === "string" && x.title.trim() !== "");
 
     entries.sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
-
-    const filtered = q
-      ? entries.filter(x => (x.title||"").toLowerCase().includes(q))
-      : entries;
+    const filtered = q ? entries.filter(x => (x.title||"").toLowerCase().includes(q)) : entries;
 
     boardGrid.innerHTML = "";
     empty.style.display = filtered.length ? "none" : "";
@@ -394,70 +396,53 @@
           <span>${chars.toLocaleString()} 文字 / ${lines.toLocaleString()} 行</span>
         </div>
       `;
-
       card.addEventListener("click", () => openBoard(item.id));
       boardGrid.appendChild(card);
     });
   }
 
-  // ===== タイトル作成 =====
   async function createBoard(){
     const title = prompt("タイトルを入力してください（例：異動情報を自動出力するVBAコード）");
     if(title === null) return;
     const t = title.trim();
-    if(!t){
-      alert("タイトルを入力してください");
-      return;
-    }
+    if(!t){ alert("タイトルを入力してください"); return; }
 
     try{
-      statusEl.textContent = "";
       const newRef = push(ref(db, BOARDS));
       const id = newRef.key;
-
-      await set(newRef, {
-        title: t,
-        text: "",
-        updatedAt: Date.now()
-      });
-
+      await set(newRef, { title:t, text:"", updatedAt: Date.now() });
       openBoard(id);
     }catch(e){
       console.error(e);
-      dbg("createBoard failed:", e?.message || e);
-      alert("作成に失敗しました。\n\n原因: " + (e?.message || e));
+      alert("作成に失敗: " + (e?.message || e));
+      mdbg("createBoard failed: " + (e?.message || e));
     }
   }
 
-  // ===== ボードを開く =====
   function openBoard(id){
     currentId = id;
     setQueryId(id);
     showEdit();
     statusEl.textContent = "接続中…";
 
-    onValue(boardRef(id), snap => {
+    onValue( boardRef(id), snap => {
       const val = snap.val() || {};
       const title = val.title || "(無題)";
       const text = typeof val.text === "string" ? val.text : "";
 
       boardTitle.textContent = title;
-
       const hasFocus = document.activeElement === textEl;
-      if(!hasFocus && textEl.value !== text){
-        textEl.value = text;
-      }
+      if(!hasFocus && textEl.value !== text) textEl.value = text;
       renderPreview(textEl.value);
 
       statusEl.textContent = "接続OK";
     }, err => {
       console.error(err);
-      dbg("openBoard onValue error:", err?.message || err);
       statusEl.textContent = "接続エラー";
+      mdbg("openBoard onValue error: " + (err?.message || err));
     });
   }
 
-  // ===== 保存（自動） =====
   function scheduleSave(){
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
@@ -465,86 +450,54 @@
       const text = textEl.value || "";
       try{
         statusEl.textContent = "保存中…";
-        await update(boardRef(currentId), {
-          text,
-          updatedAt: Date.now()
-        });
+        await update(boardRef(currentId), { text, updatedAt: Date.now() });
         statusEl.textContent = "保存しました";
         setTimeout(() => {
           if(statusEl.textContent === "保存しました") statusEl.textContent = "接続OK";
         }, 800);
       }catch(e){
         console.error(e);
-        dbg("save failed:", e?.message || e);
         statusEl.textContent = "保存エラー";
+        mdbg("save failed: " + (e?.message || e));
       }
     }, SAVE_DEBOUNCE_MS);
   }
 
-  textEl.addEventListener("input", () => {
-    renderPreview(textEl.value);
-    scheduleSave();
-  });
+  textEl.addEventListener("input", () => { renderPreview(textEl.value); scheduleSave(); });
 
-  // ===== ボタン =====
   btnNew.addEventListener("click", createBoard);
-
-  btnHome.addEventListener("click", () => {
-    setQueryId(null);
-    showList();
-  });
+  btnHome.addEventListener("click", () => { setQueryId(null); showList(); });
 
   btnCopyUrl.addEventListener("click", async () => {
     const url = location.href;
-    try{
-      await navigator.clipboard.writeText(url);
-      statusEl.textContent = "URLをコピーしました";
-      setTimeout(() => statusEl.textContent = "接続OK", 800);
-    }catch{
-      prompt("コピーできない場合は手動でコピーしてください", url);
-    }
+    try{ await navigator.clipboard.writeText(url); statusEl.textContent="URLをコピーしました"; setTimeout(()=>statusEl.textContent="接続OK",800); }
+    catch{ prompt("コピーできない場合は手動でコピーしてください", url); }
   });
 
   btnCopyText.addEventListener("click", async () => {
     const text = textEl.value || "";
-    try{
-      await navigator.clipboard.writeText(text);
-      statusEl.textContent = "コードをコピーしました";
-      setTimeout(() => statusEl.textContent = "接続OK", 800);
-    }catch{
-      alert("コピーに失敗しました（ブラウザ制限の可能性）");
-    }
+    try{ await navigator.clipboard.writeText(text); statusEl.textContent="コードをコピーしました"; setTimeout(()=>statusEl.textContent="接続OK",800); }
+    catch{ alert("コピーに失敗しました"); }
   });
 
   btnDelete.addEventListener("click", async () => {
     if(!currentId) return;
     const name = boardTitle.textContent || "このタイトル";
     if(!confirm(`「${name}」を削除しますか？`)) return;
-    try{
-      await remove(boardRef(currentId));
-      setQueryId(null);
-      showList();
-    }catch(e){
-      console.error(e);
-      dbg("delete failed:", e?.message || e);
-      alert("削除に失敗しました");
-    }
+    try{ await remove(boardRef(currentId)); setQueryId(null); showList(); }
+    catch(e){ console.error(e); alert("削除に失敗しました"); }
   });
 
-  // ===== 一覧購読（全員が全部見える）=====
   onValue(ref(db, BOARDS), snap => {
     boardsCache = snap.val() || {};
-    if(!currentId){
-      renderList();
-    }
+    if(!currentId) renderList();
   }, err => {
     console.error(err);
-    dbg("list onValue error:", err?.message || err);
+    mdbg("list onValue error: " + (err?.message || err));
   });
 
   search.addEventListener("input", renderList);
 
-  // ===== 初期表示（?id= があれば直接開く）=====
   window.addEventListener("popstate", () => {
     const id = qs().get("id");
     if(id) openBoard(id);
@@ -552,11 +505,9 @@
   });
 
   const startId = qs().get("id");
-  if(startId){
-    openBoard(startId);
-  }else{
-    showList();
-  }
+  if(startId) openBoard(startId);
+  else showList();
 </script>
+
 </body>
 </html>
