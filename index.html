@@ -270,17 +270,17 @@
 </script>
 
 <script type="module">
-  // module が起動したらまずフラグを立てる（これが出ないなら import以前に死んでる）
-  window.__MODULE_OK__ = true;
-
-  // module 内でのログも外側に出す
-  const debugBox = document.getElementById("debugBox");
-  const mdbg = (msg) => { console.log("[MDBG]", msg); debugBox.textContent += "\n" + msg; };
-  mdbg("MODULE OK: module script 起動しました");
-
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, set, update, remove, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
+  // module が起動した印（外側scriptが2秒後にチェックする）
+  window.__MODULE_OK__ = true;
+
+  // module 内のログを画面にも出す
+  const debugBox = document.getElementById("debugBox");
+  const mdbg = (msg) => { console.log("[MDBG]", msg); debugBox.textContent += "\n" + msg; };
+
+  mdbg("MODULE OK: module script 起動しました");
   mdbg("IMPORT OK: firebase modules 読み込み成功");
 
   const firebaseConfig = {
@@ -299,6 +299,7 @@
 
   const BOARDS = "groups_public_code";
 
+  // ===== DOM =====
   const btnHome = document.getElementById("btnHome");
   const btnNew = document.getElementById("btnNew");
   const btnCopyUrl = document.getElementById("btnCopyUrl");
@@ -317,6 +318,7 @@
   const previewEl = document.getElementById("preview");
   const lenEl = document.getElementById("len");
 
+  // ===== 状態 =====
   let currentId = null;
   let boardsCache = {};
   let saveTimer = null;
@@ -332,6 +334,7 @@
     const mm = String(d.getMinutes()).padStart(2,"0");
     return `${y}/${m}/${da} ${hh}:${mm}`;
   }
+
   function qs(){ return new URLSearchParams(location.search); }
   function setQueryId(id){
     const p = qs();
@@ -342,22 +345,28 @@
 
   function showList(){
     currentId = null;
+
     btnHome.style.display = "none";
     btnCopyUrl.style.display = "none";
     btnCopyText.style.display = "none";
     btnDelete.style.display = "none";
-    listView.style.display = "";
+
+    listView.style.display = "block";
     editView.style.display = "none";
+
     renderList();
   }
+
   function showEdit(){
-    btnHome.style.display = "";
-    btnCopyUrl.style.display = "";
-    btnCopyText.style.display = "";
-    btnDelete.style.display = "";
+    btnHome.style.display = "inline-block";
+    btnCopyUrl.style.display = "inline-block";
+    btnCopyText.style.display = "inline-block";
+    btnDelete.style.display = "inline-block";
+
     listView.style.display = "none";
-    editView.style.display = "";
+    editView.style.display = "block";
   }
+
   function boardRef(id){ return ref(db, `${BOARDS}/${id}`); }
   function escapeHtml(s){
     return (s ?? "").replace(/[&<>"']/g, c => ({
@@ -425,7 +434,7 @@
     showEdit();
     statusEl.textContent = "接続中…";
 
-    onValue( boardRef(id), snap => {
+    onValue(boardRef(id), snap => {
       const val = snap.val() || {};
       const title = val.title || "(無題)";
       const text = typeof val.text === "string" ? val.text : "";
@@ -470,22 +479,38 @@
 
   btnCopyUrl.addEventListener("click", async () => {
     const url = location.href;
-    try{ await navigator.clipboard.writeText(url); statusEl.textContent="URLをコピーしました"; setTimeout(()=>statusEl.textContent="接続OK",800); }
-    catch{ prompt("コピーできない場合は手動でコピーしてください", url); }
+    try{
+      await navigator.clipboard.writeText(url);
+      statusEl.textContent="URLをコピーしました";
+      setTimeout(()=>statusEl.textContent="接続OK",800);
+    }catch{
+      prompt("コピーできない場合は手動でコピーしてください", url);
+    }
   });
 
   btnCopyText.addEventListener("click", async () => {
     const text = textEl.value || "";
-    try{ await navigator.clipboard.writeText(text); statusEl.textContent="コードをコピーしました"; setTimeout(()=>statusEl.textContent="接続OK",800); }
-    catch{ alert("コピーに失敗しました"); }
+    try{
+      await navigator.clipboard.writeText(text);
+      statusEl.textContent="コードをコピーしました";
+      setTimeout(()=>statusEl.textContent="接続OK",800);
+    }catch{
+      alert("コピーに失敗しました");
+    }
   });
 
   btnDelete.addEventListener("click", async () => {
     if(!currentId) return;
     const name = boardTitle.textContent || "このタイトル";
     if(!confirm(`「${name}」を削除しますか？`)) return;
-    try{ await remove(boardRef(currentId)); setQueryId(null); showList(); }
-    catch(e){ console.error(e); alert("削除に失敗しました"); }
+    try{
+      await remove(boardRef(currentId));
+      setQueryId(null);
+      showList();
+    }catch(e){
+      console.error(e);
+      alert("削除に失敗しました");
+    }
   });
 
   onValue(ref(db, BOARDS), snap => {
@@ -508,6 +533,7 @@
   if(startId) openBoard(startId);
   else showList();
 </script>
+
 
 </body>
 </html>
