@@ -64,6 +64,16 @@
 
   main{ padding:16px; }
 
+  /* デバッグ表示（必要なければ後で消してOK） */
+  #debugBox{
+    white-space:pre-wrap;
+    font-family:Consolas, ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size:12px;
+    color:#b00020;
+    padding:8px 0 14px;
+    display:none; /* ←通常は非表示。エラーが出たら自動で表示 */
+  }
+
   /* ===== 一覧ビュー ===== */
   #listView{ display:none; }
   .listHead{
@@ -199,6 +209,9 @@
 </header>
 
 <main>
+  <!-- デバッグ枠（エラーが出たら表示される） -->
+  <div id="debugBox"></div>
+
   <!-- 一覧 -->
   <section id="listView">
     <div class="listHead">
@@ -232,12 +245,25 @@
 </main>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import {
-    getDatabase, ref, set, update, remove, onValue, push, serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  // ========= デバッグ（エラーが出たら画面に出す） =========
+  const debugBox = document.getElementById("debugBox");
+  function dbg(...a){
+    const msg = a.map(x => typeof x === "string" ? x : (x?.message || JSON.stringify(x))).join(" ");
+    console.log("[DBG]", ...a);
+    if(debugBox){
+      debugBox.style.display = "";
+      debugBox.textContent += msg + "\n";
+    }
+  }
+  window.addEventListener("error", (e) => dbg("JS ERROR:", e.message, e.filename, "line", e.lineno));
+  window.addEventListener("unhandledrejection", (e) => dbg("PROMISE ERROR:", e.reason?.message || e.reason));
+  console.log("[DBG] script start");
 
-  // ===== Firebase（あなたのタイマーと同じ設定を流用）=====
+  // ========= Firebase =========
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, set, update, remove, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // ===== Firebase（あなたの code-share プロジェクト）=====
   const firebaseConfig = {
     apiKey: "AIzaSyB4F-EkDoTZWj_-RE4CZ_mvk44YkgOU888",
     authDomain: "code-share-ab1b4.firebaseapp.com",
@@ -250,10 +276,10 @@
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
+  console.log("[DBG] firebase init ok", firebaseConfig.projectId);
 
-  // ===== RTDB パス =====
-const BOARDS = "groups_public_code"; // ← boards から変更
-
+  // ===== RTDB パス（Firebaseデータ画面に合わせる）=====
+  const BOARDS = "groups_public_code";
 
   // ===== DOM =====
   const btnHome = document.getElementById("btnHome");
@@ -310,7 +336,7 @@ const BOARDS = "groups_public_code"; // ← boards から変更
     btnDelete.style.display = "none";
     listView.style.display = "";
     editView.style.display = "none";
-    renderList(); // キャッシュから
+    renderList();
   }
 
   function showEdit(){
@@ -344,7 +370,6 @@ const BOARDS = "groups_public_code"; // ← boards から変更
       .map(([id, b]) => ({ id, ...(b||{}) }))
       .filter(x => x && typeof x.title === "string" && x.title.trim() !== "");
 
-    // 新しい順（updatedAtが無い場合は0）
     entries.sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
 
     const filtered = q
@@ -384,24 +409,25 @@ const BOARDS = "groups_public_code"; // ← boards から変更
       alert("タイトルを入力してください");
       return;
     }
-  
+
     try{
+      statusEl.textContent = "";
       const newRef = push(ref(db, BOARDS));
       const id = newRef.key;
-  
+
       await set(newRef, {
         title: t,
         text: "",
         updatedAt: Date.now()
       });
-  
+
       openBoard(id);
     }catch(e){
       console.error(e);
+      dbg("createBoard failed:", e?.message || e);
       alert("作成に失敗しました。\n\n原因: " + (e?.message || e));
     }
   }
-
 
   // ===== ボードを開く =====
   function openBoard(id){
@@ -410,7 +436,6 @@ const BOARDS = "groups_public_code"; // ← boards から変更
     showEdit();
     statusEl.textContent = "接続中…";
 
-    // 購読（そのidだけ）
     onValue(boardRef(id), snap => {
       const val = snap.val() || {};
       const title = val.title || "(無題)";
@@ -418,7 +443,6 @@ const BOARDS = "groups_public_code"; // ← boards から変更
 
       boardTitle.textContent = title;
 
-      // 編集中の上書き事故を減らす：フォーカス中は基本上書きしない（荒らし対策無視の前提で最低限だけ）
       const hasFocus = document.activeElement === textEl;
       if(!hasFocus && textEl.value !== text){
         textEl.value = text;
@@ -428,6 +452,7 @@ const BOARDS = "groups_public_code"; // ← boards から変更
       statusEl.textContent = "接続OK";
     }, err => {
       console.error(err);
+      dbg("openBoard onValue error:", err?.message || err);
       statusEl.textContent = "接続エラー";
     });
   }
@@ -450,6 +475,7 @@ const BOARDS = "groups_public_code"; // ← boards から変更
         }, 800);
       }catch(e){
         console.error(e);
+        dbg("save failed:", e?.message || e);
         statusEl.textContent = "保存エラー";
       }
     }, SAVE_DEBOUNCE_MS);
@@ -500,6 +526,7 @@ const BOARDS = "groups_public_code"; // ← boards から変更
       showList();
     }catch(e){
       console.error(e);
+      dbg("delete failed:", e?.message || e);
       alert("削除に失敗しました");
     }
   });
@@ -510,6 +537,9 @@ const BOARDS = "groups_public_code"; // ← boards から変更
     if(!currentId){
       renderList();
     }
+  }, err => {
+    console.error(err);
+    dbg("list onValue error:", err?.message || err);
   });
 
   search.addEventListener("input", renderList);
