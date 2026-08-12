@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excel 操作ショートカット 1枚チートシート</title>
+<style>
+  @page { size: A4 landscape; margin: 6mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body {
+    font-family: "Noto Sans CJK JP", "Yu Gothic", "Meiryo", sans-serif;
+    color: #161616;
+    font-size: 8.7pt;
+    line-height: 1.17;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet {
+    width: 100%;
+    height: 198mm;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 2.2mm;
+  }
+  header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    border-bottom: 1.6pt solid #222;
+    padding: 0 0 1.8mm 0;
+  }
+  h1 {
+    margin: 0;
+    font-size: 17pt;
+    line-height: 1;
+    letter-spacing: .02em;
+  }
+  .subtitle {
+    font-size: 7.8pt;
+    color: #555;
+    white-space: nowrap;
+  }
+  main {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 2.2mm;
+    min-height: 0;
+  }
+  section {
+    border: 0.8pt solid #a8a8a8;
+    border-radius: 2.2mm;
+    overflow: hidden;
+    min-height: 0;
+    background: #fff;
+  }
+  h2 {
+    margin: 0;
+    padding: 1.5mm 2.2mm 1.25mm;
+    font-size: 10pt;
+    line-height: 1;
+    background: #eeeeee;
+    border-bottom: 0.7pt solid #b8b8b8;
+  }
+  .rows { padding: 1.15mm 1.7mm 1.1mm; }
+  .row {
+    display: grid;
+    grid-template-columns: 39% 61%;
+    align-items: center;
+    min-height: 5.2mm;
+    border-bottom: 0.45pt solid #e6e6e6;
+    padding: .35mm .4mm;
+  }
+  .row:last-child { border-bottom: 0; }
+  .keys {
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: -.01em;
+  }
+  .desc { padding-left: 1.2mm; }
+  kbd {
+    display: inline-block;
+    font-family: "Noto Sans CJK JP", "Yu Gothic", "Meiryo", sans-serif;
+    font-size: 7.55pt;
+    font-weight: 700;
+    line-height: 1.25;
+    padding: .18mm .78mm .24mm;
+    border: .65pt solid #777;
+    border-bottom-width: 1.25pt;
+    border-radius: 1.05mm;
+    background: #fafafa;
+    vertical-align: baseline;
+  }
+  .plus { color: #555; padding: 0 .25mm; font-weight: 700; }
+  footer {
+    border-top: 1.2pt solid #333;
+    padding-top: 1.4mm;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3mm;
+    align-items: center;
+    font-size: 7.8pt;
+  }
+  .mantra { font-weight: 700; }
+  .notes { color: #555; white-space: nowrap; }
+  .sep { padding: 0 1.6mm; color: #aaa; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <h1>Excel 操作ショートカット｜1枚チートシート</h1>
+    <div class="subtitle">Windows版 Excel / 学習後の「思い出す用」</div>
+  </header>
+
+  <main>
+    <section>
+      <h2>1. 安全・基本</h2>
+      <div class="rows">
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>S</kbd></div><div class="desc">保存</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Z</kbd></div><div class="desc">元に戻す</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Y</kbd></div><div class="desc">やり直す</div></div>
+        <div class="row"><div class="keys"><kbd>Esc</kbd></div><div class="desc">入力・コピーをキャンセル</div></div>
+        <div class="row"><div class="keys"><kbd>F2</kbd></div><div class="desc">セルを編集</div></div>
+        <div class="row"><div class="keys"><kbd>F4</kbd></div><div class="desc">直前の操作を繰り返す</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>1</kbd></div><div class="desc">セルの書式設定</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. 移動・選択</h2>
+      <div class="rows">
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>↑↓←→</kbd></div><div class="desc">データの端へ移動</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>↑↓←→</kbd></div><div class="desc">端まで一気に選択</div></div>
+        <div class="row"><div class="keys"><kbd>Shift</kbd><span class="plus">+</span><kbd>↑↓←→</kbd></div><div class="desc">選択範囲を1セルずつ拡張</div></div>
+        <div class="row"><div class="keys"><kbd>Shift</kbd><span class="plus">+</span><kbd>Space</kbd></div><div class="desc">行全体を選択</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Space</kbd></div><div class="desc">列全体を選択</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Home</kbd></div><div class="desc">A1へ戻る</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>End</kbd></div><div class="desc">最後の使用セルへ</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>G</kbd> / <kbd>F5</kbd></div><div class="desc">指定セルへジャンプ</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. 入力・連続入力</h2>
+      <div class="rows">
+        <div class="row"><div class="keys"><kbd>Alt</kbd><span class="plus">+</span><kbd>Enter</kbd></div><div class="desc">セル内改行</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Enter</kbd></div><div class="desc">選択範囲へ一括入力</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>D</kbd></div><div class="desc">上のセルを下へコピー</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>R</kbd></div><div class="desc">左のセルを右へコピー</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>E</kbd></div><div class="desc">フラッシュフィル</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>;</kbd></div><div class="desc">今日の日付を入力</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>;</kbd></div><div class="desc">現在時刻を入力</div></div>
+        <div class="row"><div class="keys">フィルハンドルをダブルクリック</div><div class="desc">下方向へ自動入力</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. コピー・貼り付け・検索</h2>
+      <div class="rows">
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>C</kbd></div><div class="desc">コピー</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>X</kbd></div><div class="desc">切り取り</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>V</kbd></div><div class="desc">貼り付け</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Alt</kbd><span class="plus">+</span><kbd>V</kbd></div><div class="desc">形式を選択して貼り付け</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>F</kbd></div><div class="desc">検索</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>H</kbd></div><div class="desc">置換</div></div>
+        <div class="row"><div class="keys">コピー → <kbd>Ctrl</kbd><span class="plus">+</span><kbd>Alt</kbd><span class="plus">+</span><kbd>V</kbd></div><div class="desc">値貼付 / 行列入替 など</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. 行・列・マウス小技</h2>
+      <div class="rows">
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>+</kbd></div><div class="desc">セル / 行 / 列を挿入</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>-</kbd></div><div class="desc">セル / 行 / 列を削除</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>9</kbd></div><div class="desc">選択行を非表示</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>0</kbd>*</div><div class="desc">選択列を非表示</div></div>
+        <div class="row"><div class="keys"><kbd>Shift</kbd> + 境界をドラッグ</div><div class="desc">間へ差し込んで移動・入替</div></div>
+        <div class="row"><div class="keys">セル境界をドラッグ</div><div class="desc">選択範囲を移動</div></div>
+        <div class="row"><div class="keys">列 / 行境界をダブルクリック</div><div class="desc">幅 / 高さを自動調整</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>6. 整理・シート・印刷</h2>
+      <div class="rows">
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>L</kbd></div><div class="desc">フィルター ON / OFF</div></div>
+        <div class="row"><div class="keys"><kbd>Alt</kbd><span class="plus">+</span><kbd>↓</kbd></div><div class="desc">ドロップダウンを開く</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>T</kbd></div><div class="desc">範囲をテーブル化</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>PgUp/PgDn</kbd></div><div class="desc">前 / 次のシート</div></div>
+        <div class="row"><div class="keys"><kbd>Shift</kbd><span class="plus">+</span><kbd>F11</kbd></div><div class="desc">新しいシートを追加</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd> + シートタブをドラッグ</div><div class="desc">シートを複製</div></div>
+        <div class="row"><div class="keys"><kbd>F12</kbd></div><div class="desc">名前を付けて保存</div></div>
+        <div class="row"><div class="keys"><kbd>Ctrl</kbd><span class="plus">+</span><kbd>P</kbd></div><div class="desc">印刷 / ページ切れ確認</div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="mantra">迷ったら <kbd>Ctrl</kbd>+<kbd>Z</kbd><span class="sep">|</span>長い表は <kbd>Ctrl</kbd>+方向キー<span class="sep">|</span>貼り付け事故防止は <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd><span class="sep">|</span>差し込み移動は <kbd>Shift</kbd>+ドラッグ</div>
+    <div class="notes">* Ctrl+0 は環境により無効の場合あり</div>
+  </footer>
+</div>
+</body>
+</html>
