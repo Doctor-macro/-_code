@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Teams・SharePoint上のExcelファイルをPower Queryで取得・加工・更新する初心者向け操作マニュアル"><title>Power Query 操作マニュアル | Teams・SharePoint</title><style>
+:root {--ink:#24364b;--ink-soft:#536579;--blue:#185abd;--blue-deep:#124583;--line:#d8e3f0;--paper:#fff;--wash:#f5f8fc;--pale:#eaf2fd;--light-blue:#d7e7fa;}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--wash);color:var(--ink);font-family:"Yu Gothic","Meiryo","Hiragino Kaku Gothic ProN",system-ui,sans-serif;font-size:15px;line-height:1.85;overflow-wrap:anywhere} a{color:var(--blue);text-underline-offset:3px}a:hover{color:#0c396f}
+.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;background:#fff;padding:8px;z-index:100}.topbar{background:#fff;border-bottom:1px solid var(--line)}.topbar-inner{max-width:1330px;margin:auto;padding:12px 30px;display:flex;align-items:center;justify-content:space-between;gap:12px}.brand{font-size:13px;font-weight:800;letter-spacing:.03em;color:var(--blue-deep)}.micro{font-size:12px;color:var(--ink-soft)}.hero{background:linear-gradient(115deg,#174f95,#1862b9);color:#fff}.hero-inner{max-width:1330px;margin:auto;padding:36px 30px 39px}.eyebrow{letter-spacing:.13em;color:#c9e0ff;font-weight:700;font-size:12px}.hero h1{font-size:clamp(26px,3vw,38px);line-height:1.32;letter-spacing:-.03em;margin:12px 0}.hero .sub{font-size:16px;margin:0 0 12px;color:#f1f6ff}.hero .meta{font-size:12px;color:#d8e7fb;margin:0}.tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:17px}.tag{display:inline-block;font-size:12px;border-radius:30px;border:1px solid #8dbce9;color:#fff;padding:3px 11px}.layout{max-width:1330px;display:grid;grid-template-columns:278px minmax(0,1fr);gap:26px;padding:30px;align-items:start;margin:auto}.sidebar{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:16px 13px}.sidebar h2{font-size:14px;color:var(--blue-deep);margin:0 10px 9px}.sidebar nav{display:flex;flex-direction:column;gap:1px}.sidebar nav a{display:block;text-decoration:none;font-size:12.4px;line-height:1.5;color:var(--ink-soft);padding:7px 10px;border-radius:5px}.sidebar nav a:hover,.sidebar nav a:focus{background:var(--pale);color:var(--blue-deep)}.sidebar .side-help{border-top:1px solid var(--line);padding:12px 10px 0;margin-top:12px;font-size:11.6px;color:var(--ink-soft);line-height:1.7}.main{min-width:0}.main-intro{background:#fff;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:8px;padding:16px 22px;margin-bottom:16px}.main-intro h2{font-size:17px;margin:0 0 5px}.main-intro p{margin:0;font-size:13px;color:var(--ink-soft)}.manual-section{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:26px 34px 29px;margin:0 0 17px;scroll-margin-top:20px;box-shadow:0 2px 7px rgba(22,57,102,.03)}.manual-section h2{font-size:20px;line-height:1.45;border-bottom:2px solid var(--light-blue);padding:0 0 12px;margin:0 0 18px;color:var(--blue-deep)}.manual-section h3{color:var(--blue);font-size:16px;margin:22px 0 10px;line-height:1.55}.manual-section p{margin:11px 0}.manual-section p:last-child{margin-bottom:0}.table-scroll{overflow-x:auto;margin:15px 0 20px;border:1px solid #dce7f2;border-radius:6px}table{width:100%;border-collapse:collapse;line-height:1.62;font-size:13px;min-width:490px}th,td{text-align:left;vertical-align:top;padding:11px 12px;border-bottom:1px solid #e5edf7}thead th{background:var(--blue-deep);color:#fff;font-weight:700;white-space:normal}tbody tr:nth-child(2n){background:#f3f7fc}tbody tr:last-child td{border-bottom:0}.steps{list-style:decimal;padding-left:28px;margin:14px 0 20px}.steps li{padding:4px 2px 4px 5px}.steps li::marker{color:var(--blue);font-weight:bold}.checklist{list-style:square;padding-left:24px;margin:14px 0}.checklist li{padding:3px 2px}.note{border-left:3px solid #5d90d1;background:#f0f6fd;padding:11px 15px;margin:14px 0 19px}.note p{margin:3px 0!important}.note-tag{font-size:12px;display:block;font-weight:700;color:var(--blue-deep)}.quickpath{border-radius:7px;background:#edf5ff;border:1px solid #d2e6ff;padding:16px 18px;font-weight:600;color:#20446c;line-height:2}.references{font-size:13px;line-height:1.6}.references p{padding:7px 0;margin:0;border-bottom:1px dashed #dde7ef}.references a{font-size:12px}.footer{color:var(--ink-soft);max-width:1330px;margin:0 auto;padding:8px 30px 35px;font-size:12px}.top-link{font-size:12px;text-decoration:none;float:right}.utility{display:flex;gap:7px}.utility button{border:1px solid #c9d8e8;border-radius:6px;background:white;color:var(--blue-deep);font:inherit;font-size:12px;padding:6px 11px;cursor:pointer}.utility button:hover{background:var(--pale)}
+@media(max-width:900px){.layout{display:block;padding:18px 14px}.sidebar{position:static;max-height:none;margin-bottom:14px}.sidebar nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.manual-section{padding:22px 18px}.hero-inner{padding:29px 21px}.topbar-inner{padding:10px 20px}}
+@media(max-width:540px){.sidebar nav{grid-template-columns:1fr}.hero .sub{font-size:14px}.manual-section h2{font-size:18px}.manual-section{padding:20px 15px}.topbar .micro{display:none}table{min-width:470px}}
+@media print{html{scroll-behavior:auto}body{background:white;font-size:10pt;color:black}.topbar,.sidebar,.utility,.main-intro,.footer,.top-link{display:none!important}.hero{background:none;color:#184d87;border-bottom:2px solid #2866ad}.hero-inner{padding:14mm 0 8mm}.hero .eyebrow,.hero .meta,.hero .sub{color:#444}.tag{color:#444;border-color:#aaa}.layout{display:block;padding:0;margin:auto}.manual-section{box-shadow:none;border:0;border-radius:0;padding:7mm 0 3mm;margin:0;break-inside:auto}.manual-section h2{break-after:avoid}.manual-section h3{break-after:avoid}table{min-width:0;font-size:9pt}.table-scroll{overflow:visible}.table-scroll tr{break-inside:avoid}.steps li{break-inside:avoid}.note{break-inside:avoid}a{color:#184d87} @page{size:A4;margin:16mm}}
+</style></head>
+<body id="top"><a class="skip" href="#content">本文へ移動</a>
+<div class="topbar"><div class="topbar-inner"><div class="brand">Microsoft 365 / Excel Power Query</div><div class="utility"><span class="micro">操作手順ガイド</span><button type="button" onclick="window.print()">印刷 / PDF保存</button></div></div></div>
+<header class="hero"><div class="hero-inner"><div class="eyebrow">BEGINNER GUIDE</div><h1>Power Query 操作マニュアル</h1><p class="sub">Teams・SharePointのExcelファイルを取り込む／加工する／更新する</p><p class="meta">対象：Excel for Microsoft 365（Windowsデスクトップ版）を使う初心者</p><p class="meta">作成：2026年11月10日　|　実務で使う際は組織の権限設定とUIを確認してください。</p><div class="tags"><span class="tag">Excel for Microsoft 365</span><span class="tag">Windows デスクトップ</span><span class="tag">Teams / SharePoint</span></div></div></header>
+<div class="layout"><aside class="sidebar" aria-label="目次"><h2>目次</h2><nav><a href="#section-01">最初に読む：この資料で扱うこと</a>
+<a href="#section-02">1. Teams・SharePoint・OneDriveの違い</a>
+<a href="#section-03">2. 接続方式を決める</a>
+<a href="#section-04">3. TeamsからSharePointのサイトURLを取得する</a>
+<a href="#section-05">4. ExcelからSharePointフォルダーへ接続する</a>
+<a href="#section-06">5. 対象ファイルを1件だけ指定する</a>
+<a href="#section-07">6. Excelブック内のテーブル・シートを選ぶ</a>
+<a href="#section-08">7. 複数のExcelファイルをまとめる場合</a>
+<a href="#section-09">8. Power Queryエディターの見方</a>
+<a href="#section-10">9. 基本の加工例</a>
+<a href="#section-11">10. 「追加」と「マージ」の違い</a>
+<a href="#section-12">11. 加工結果をExcelに読み込む</a>
+<a href="#section-13">12. 元データが変わった場合：更新する</a>
+<a href="#section-14">13. 加工内容を変更する</a>
+<a href="#section-15">14. 接続先が変わった場合：どこを直す？</a>
+<a href="#section-16">15. 認証・アクセス許可を直す</a>
+<a href="#section-17">16. エラー別トラブルシューティング</a>
+<a href="#section-18">17. 継続運用のための設計ルール</a>
+<a href="#section-19">18. 練習課題（最短10分）</a>
+<a href="#section-20">付録A　画面が異なる場合の考え方</a>
+<a href="#section-21">付録B　参考資料（Microsoft公式）</a></nav><div class="side-help">各見出しをクリックすると該当する操作説明に移動します。オフライン環境でも閲覧できる単一HTMLファイルです。</div></aside><main class="main" id="content"><div class="main-intro"><h2>このガイドの使い方</h2><p>左の目次から操作を選んで参照できます。印刷・PDF保存にも対応しています。</p></div><section id="section-01" class="manual-section" aria-labelledby="heading-01">
+<h2 id="heading-01">最初に読む：この資料で扱うこと</h2>
+<p>本資料は「SharePoint上にあるExcelファイルを、ExcelのPower Queryで取り込む」までを、画面操作の順番に沿って解説します。単一ファイル、同じ形式の複数ファイル、クエリの編集、更新、接続先変更を区別して説明します。</p>
+<h3>最短ルート（1ファイルの場合）</h3>
+<div class="quickpath">Teamsの対象チャネル → SharePointサイトを開く → サイトURLを取得 → Excel［データの取得］→［SharePoint フォルダー］→［データの変換］→［Name］・［Folder Path］で絞る → ［Content］のBinary → 対象テーブル → 加工 → ［閉じて読み込む］</div>
+<h3>重要な考え方</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>用語</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>データソース</td>
+<td>データを取得する元ファイル、サイト、テーブルなど</td>
+</tr>
+<tr>
+<td>クエリ</td>
+<td>取り込み方法と加工の手順を保存したもの</td>
+</tr>
+<tr>
+<td>適用されたステップ</td>
+<td>加工履歴。画面右側から修正や削除が可能</td>
+</tr>
+<tr>
+<td>更新</td>
+<td>保存した処理を再実行し、結果を再取得・再出力すること</td>
+</tr>
+</tbody>
+</table></div>
+<aside class="note"><span class="note-tag">補足</span><p>Power Queryは基本的に取り込み・整形する機能です。読み込んだ結果を編集しても、その変更が元のSharePoint上のファイルに書き戻されるわけではありません。</p></aside>
+</section>
+<section id="section-02" class="manual-section" aria-labelledby="heading-02">
+<h2 id="heading-02">1. Teams・SharePoint・OneDriveの違い</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>ファイルがある場所</th>
+<th>保存先の原則</th>
+<th>接続前にすること</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>標準チャネル</td>
+<td>チームのSharePointサイト</td>
+<td>チャネルからSharePointを開いてURL確認</td>
+</tr>
+<tr>
+<td>プライベート／共有チャネル</td>
+<td>そのチャネル専用のSharePointサイト</td>
+<td>該当チャネルからURL確認</td>
+</tr>
+<tr>
+<td>チャットで共有したファイル</td>
+<td>送信者のOneDriveなど</td>
+<td>ファイルの実際の保存先・権限を確認</td>
+</tr>
+</tbody>
+</table></div>
+<aside class="note"><span class="note-tag">補足</span><p>Teams上で表示されていても、チャットとチャネルは保存先が異なることがあります。共有リンクの画面ではなく、実際の保存先を起点にします。</p></aside>
+</section>
+<section id="section-03" class="manual-section" aria-labelledby="heading-03">
+<h2 id="heading-03">2. 接続方式を決める</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>目的</th>
+<th>おすすめの接続</th>
+<th>留意点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SharePoint上のExcel 1件</td>
+<td>SharePoint フォルダー</td>
+<td>抽出条件で1ファイルに絞る</td>
+</tr>
+<tr>
+<td>月次・部門別の複数Excel</td>
+<td>SharePoint フォルダー＋ファイルの結合</td>
+<td>形式・テーブル名が揃っているか確認</td>
+</tr>
+<tr>
+<td>SharePointリストの行</td>
+<td>SharePoint Online リスト</td>
+<td>ファイルとは別物</td>
+</tr>
+<tr>
+<td>PCに保存したExcel</td>
+<td>Excelブック／フォルダー</td>
+<td>PCの保存先が変わると再設定が必要</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="section-04" class="manual-section" aria-labelledby="heading-04">
+<h2 id="heading-04">3. TeamsからSharePointのサイトURLを取得する</h2>
+<ol class="steps">
+<li>Teamsを開き、対象の「チーム → チャネル」を選択します。</li>
+<li>上部の［共有］を開き、［ライブラリ内］などから取り込みたいExcelファイルの所在を確認します。</li>
+<li>［…］などのメニューから［SharePointで開く］を選びます。UI上の位置はTeamsの更新により異なります。</li>
+<li>SharePoint上でサイトのホームを開き、サイトURLを控えます。</li>
+<li>取り込みたいファイル名、フォルダー名、Excel内の「テーブル名／シート名」も記録します。</li>
+</ol>
+<h3>サイトURLとファイル共有リンクは異なる</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>用途</th>
+<th>例（架空の組織）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>サイトURL（接続入力例）</td>
+<td><a href="https://contoso.sharepoint.com/sites/SalesTeam" target="_blank" rel="noopener noreferrer">https://contoso.sharepoint.com/sites/SalesTeam</a></td>
+</tr>
+<tr>
+<td>ファイルのパス例</td>
+<td><a href="https://contoso.sharepoint.com/sites/SalesTeam/Shared%20Documents/General/sales.xlsx" target="_blank" rel="noopener noreferrer">https://contoso.sharepoint.com/sites/SalesTeam/Shared%20Documents/General/sales.xlsx</a></td>
+</tr>
+<tr>
+<td>共有リンク例</td>
+<td><a href="https://contoso.sharepoint.com/:x:/r/sites/...?..." target="_blank" rel="noopener noreferrer">https://contoso.sharepoint.com/:x:/r/sites/...?...</a></td>
+</tr>
+</tbody>
+</table></div>
+<p>SharePoint フォルダー接続には基本的に「サイトURL」を入力します。ファイルURLや「リンクをコピー」で得た共有URLをそのまま貼り付けると、接続に失敗することがあります。</p>
+<aside class="note"><span class="note-tag">補足</span><p>実際のライブラリ名、言語による表示名、フォルダーパスは組織環境により異なります。</p></aside>
+</section>
+<section id="section-05" class="manual-section" aria-labelledby="heading-05">
+<h2 id="heading-05">4. ExcelからSharePointフォルダーへ接続する</h2>
+<ol class="steps">
+<li>Excelデスクトップアプリで新しいブックまたは集計用ブックを開きます。</li>
+<li>［データ］→［データの取得］から［SharePoint フォルダー］を選びます。メニュー分類が異なる場合はコネクタ名を探します。</li>
+<li>［サイトURL］欄へ「3」で控えたサイトURLを入力し、［OK］を選びます。</li>
+<li>初回接続なら［組織アカウント］を選び、閲覧権限のある会社・学校アカウントでサインインします。</li>
+<li>ファイル一覧が表示されたら、まず［データの変換］を選びます。</li>
+</ol>
+<p>接続直後の一覧に「対象サイト内の別チャネルやフォルダーのExcelファイル」も含まれる場合があります。すぐに全件結合せず、Power Queryエディターで抽出条件を設定します。</p>
+</section>
+<section id="section-06" class="manual-section" aria-labelledby="heading-06">
+<h2 id="heading-06">5. 対象ファイルを1件だけ指定する</h2>
+<ol class="steps">
+<li>Power Queryエディターの一覧から［Name］列を確認します。</li>
+<li>［Name］列の▼で取り込みたいExcelファイル名だけに絞り込みます（例：sales_2026.xlsx）。</li>
+<li>同じ名前のファイルが複数存在する場合は［Folder Path］でも保存先を絞ります。</li>
+<li>1行だけ残ったことを確認し、［Content］列の［Binary］をクリックします。</li>
+<li>Excelブックのオブジェクト（テーブル／シート）が表示されたら、目的のものを選びます。</li>
+<li>プレビューで列名と数件の値を確認し、加工へ進みます。</li>
+</ol>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>列名</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>ファイル名を特定する</td>
+</tr>
+<tr>
+<td>Folder Path</td>
+<td>同名ファイルを取り違えない</td>
+</tr>
+<tr>
+<td>Extension</td>
+<td>拡張子の絞り込みに使う</td>
+</tr>
+<tr>
+<td>Content</td>
+<td>実ファイル本体。Binaryをクリックすると開ける</td>
+</tr>
+</tbody>
+</table></div>
+<aside class="note"><span class="note-tag">補足</span><p>名前だけではなく「フォルダー＋ファイル名」で特定すると、意図しないファイルを取り込む事故を減らせます。</p></aside>
+</section>
+<section id="section-07" class="manual-section" aria-labelledby="heading-07">
+<h2 id="heading-07">6. Excelブック内のテーブル・シートを選ぶ</h2>
+<p>Power QueryはExcelファイルの中から、テーブル・シート・名前付き範囲などを取得できます。元ファイル側でデータ範囲をExcelテーブルとして定義すると、新しい行が追加されても範囲を管理しやすくなります。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>選択項目</th>
+<th>利点</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>テーブル（Table）</td>
+<td>範囲や列名を管理しやすい</td>
+<td>名前変更すると接続手順に影響</td>
+</tr>
+<tr>
+<td>シート（Sheet）</td>
+<td>既存の未整備ファイルも取得しやすい</td>
+<td>空白行や余計な見出し行に注意</td>
+</tr>
+<tr>
+<td>名前付き範囲</td>
+<td>特定のセル範囲だけ対象</td>
+<td>参照範囲が保守されているか確認</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="section-08" class="manual-section" aria-labelledby="heading-08">
+<h2 id="heading-08">7. 複数のExcelファイルをまとめる場合</h2>
+<ol class="steps">
+<li>SharePoint フォルダー接続後の一覧で、まず対象フォルダー、拡張子、ファイル名規則を絞ります。</li>
+<li>Excelの編集中に作られる「~$」で始まる一時ファイルや、関係ない帳票を除外します。</li>
+<li>対象ファイルのみ表示された状態で［Content］列の「ファイルの結合」を実行します。</li>
+<li>サンプルファイルの中から、全ファイルで共通のテーブル名／シート名を選びます。</li>
+<li>結合後の件数・列名・エラー数を確認してから読み込みます。</li>
+</ol>
+<p>同じフォルダーの複数ファイルを一括結合する機能は、各ファイルが同じ表構造であることを前提に動作します。Excelの表名や列名が異なる場合は別途調整が必要です。</p>
+</section>
+<section id="section-09" class="manual-section" aria-labelledby="heading-09">
+<h2 id="heading-09">8. Power Queryエディターの見方</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>場所</th>
+<th>名称</th>
+<th>役割</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>左</td>
+<td>クエリ一覧</td>
+<td>別の加工処理を選ぶ</td>
+</tr>
+<tr>
+<td>中央</td>
+<td>プレビュー</td>
+<td>現在のステップでのデータを確認</td>
+</tr>
+<tr>
+<td>右</td>
+<td>クエリの設定／適用されたステップ</td>
+<td>加工履歴の確認・修正</td>
+</tr>
+</tbody>
+</table></div>
+<p>変換を行うたびにステップが追加されます。右のステップをクリックすると途中の結果を確認できます。歯車があるステップは設定画面から直せることが多く、不要なステップは削除できます。</p>
+</section>
+<section id="section-10" class="manual-section" aria-labelledby="heading-10">
+<h2 id="heading-10">9. 基本の加工例</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>やりたいこと</th>
+<th>代表的な操作</th>
+<th>注意点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>不要な列を消す</td>
+<td>対象列を選択 → 列の削除</td>
+<td>後段で参照する列を削除しない</td>
+</tr>
+<tr>
+<td>必要な行だけ残す</td>
+<td>列の▼ → フィルター</td>
+<td>更新で新行にも同じ条件が適用される</td>
+</tr>
+<tr>
+<td>日付を日付にする</td>
+<td>列を選択 → データ型 → 日付</td>
+<td>異常値がエラーにならないか確認</td>
+</tr>
+<tr>
+<td>表記ゆれをそろえる</td>
+<td>値の置換</td>
+<td>null と0の違いを把握</td>
+</tr>
+<tr>
+<td>文字列を分割</td>
+<td>列の分割</td>
+<td>区切り記号や分割数を確認</td>
+</tr>
+<tr>
+<td>重複を除く</td>
+<td>列選択 → 重複の削除</td>
+<td>どの列の組合せを重複とするか決める</td>
+</tr>
+</tbody>
+</table></div>
+<aside class="note"><span class="note-tag">補足</span><p>プレビューの内容だけでなく、読み込み後の「件数・数量合計・最新日付」を検証してください。</p></aside>
+</section>
+<section id="section-11" class="manual-section" aria-labelledby="heading-11">
+<h2 id="heading-11">10. 「追加」と「マージ」の違い</h2>
+<p>クエリの追加（Append）は、同じ列構造を持つ表を縦方向に連結します。例：9月の売上と10月の売上。クエリのマージ（Merge）は、店舗コードなどのキーをもとに、別表の情報を横方向に結合します。例：売上データに店舗マスタから店舗名を付与。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>機能</th>
+<th>結果</th>
+<th>業務例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>追加</td>
+<td>行を増やす</td>
+<td>売上_9月＋売上_10月</td>
+</tr>
+<tr>
+<td>マージ</td>
+<td>列を増やす</td>
+<td>売上表＋店舗マスタの店舗名</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="section-12" class="manual-section" aria-labelledby="heading-12">
+<h2 id="heading-12">11. 加工結果をExcelに読み込む</h2>
+<ol class="steps">
+<li>Power Queryエディターで［ホーム］→［閉じて読み込む］を選びます。</li>
+<li>必要なら［閉じて読み込む先］で、テーブル／接続のみ／データモデルなどを指定します。</li>
+<li>Excelシートに一覧表が表示されたら、件数や数値の合計を確認します。</li>
+<li>集計用の数式やピボットは、読み込み先のテーブルを参照するように設計します。</li>
+</ol>
+<p>読み込まれたテーブルを直接編集した場合、次回の更新で書き換わる可能性があります。手入力は別シートに分けるか、Power Queryの変換に組み込むのが基本です。</p>
+</section>
+<section id="section-13" class="manual-section" aria-labelledby="heading-13">
+<h2 id="heading-13">12. 元データが変わった場合：更新する</h2>
+<ol class="steps">
+<li>元ファイルがSharePoint上で保存済みになっていることを確認します。</li>
+<li>集計ブックを開き、Excel［データ］→［すべて更新］を選びます。</li>
+<li>エラーがないことを確認し、結果の件数・日付範囲・金額を見直します。</li>
+<li>必要に応じて接続のプロパティで、起動時や一定間隔の更新設定を確認します。</li>
+</ol>
+<p>更新は「取り込みから加工・出力までの処理をもう一度実行する」ものです。常時同期を意味しません。元ファイルの列名やテーブル名を変更すると、更新エラーの原因になる場合があります。</p>
+</section>
+<section id="section-14" class="manual-section" aria-labelledby="heading-14">
+<h2 id="heading-14">13. 加工内容を変更する</h2>
+<ol class="steps">
+<li>Excelで［データ］→［クエリと接続］を開きます。</li>
+<li>変更対象のクエリを右クリックして［編集］を選びます。</li>
+<li>右側の［適用されたステップ］を上から順に確認し、変更したいステップを選びます。</li>
+<li>歯車が表示される場合は設定を編集します。不要なステップは削除可能です。</li>
+<li>後続のステップでエラーが発生していないか確認し、［閉じて読み込む］を実行します。</li>
+</ol>
+<aside class="note"><span class="note-tag">補足</span><p>ステップの途中を変更すると、その後に続く列名参照・型変換・マージなどに影響する場合があります。</p></aside>
+</section>
+<section id="section-15" class="manual-section" aria-labelledby="heading-15">
+<h2 id="heading-15">14. 接続先が変わった場合：どこを直す？</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>発生した変更</th>
+<th>修正箇所の目安</th>
+<th>再確認</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>データが増えた／値だけ変更</td>
+<td>［すべて更新］</td>
+<td>件数・合計</td>
+</tr>
+<tr>
+<td>ファイル名の変更</td>
+<td>Nameフィルター</td>
+<td>対象が1件か</td>
+</tr>
+<tr>
+<td>同じサイト内でフォルダー移動</td>
+<td>Folder Pathフィルター</td>
+<td>パスの一致</td>
+</tr>
+<tr>
+<td>別のSharePointサイトに移動</td>
+<td>［ソース］URLまたはデータソース設定</td>
+<td>権限・抽出条件</td>
+</tr>
+<tr>
+<td>テーブル／シート名の変更</td>
+<td>ナビゲーションの指定</td>
+<td>表構造</td>
+</tr>
+<tr>
+<td>組織アカウントの変更</td>
+<td>データソース設定・アクセス許可</td>
+<td>サインイン</td>
+</tr>
+</tbody>
+</table></div>
+<h3>接続先変更の基本手順</h3>
+<ol class="steps">
+<li>Excelの［クエリと接続］から対象のクエリを［編集］します。</li>
+<li>右側の［ソース］ステップを選び、歯車があればURLを変更します。</li>
+<li>［フィルターされた行］などの条件で［Name］と［Folder Path］を更新します。</li>
+<li>必要に応じて［ナビゲーション］手順の表名／シート名を修正します。</li>
+<li>［閉じて読み込む］後、結果件数などを確認します。</li>
+</ol>
+</section>
+<section id="section-16" class="manual-section" aria-labelledby="heading-16">
+<h2 id="heading-16">15. 認証・アクセス許可を直す</h2>
+<ol class="steps">
+<li>Excel［データ］→［データの取得］→［データソース設定］を開きます。</li>
+<li>「現在のブックのデータソース」から対象SharePointサイトを確認します。</li>
+<li>必要に応じて［アクセス許可の編集］や［アクセス許可のクリア］で認証情報を再設定します。</li>
+<li>組織アカウントを選び直し、実際に権限があるアカウントでサインインします。</li>
+<li>SharePointのWeb画面で元ファイルの閲覧ができることも確認します。</li>
+</ol>
+<aside class="note"><span class="note-tag">補足</span><p>Power Query側の認証情報を消しても、SharePointサイトそのものにアクセス権が付与されるわけではありません。権限不足なら管理者・ファイル所有者への依頼が必要です。</p></aside>
+</section>
+<section id="section-17" class="manual-section" aria-labelledby="heading-17">
+<h2 id="heading-17">16. エラー別トラブルシューティング</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>エラー・現象</th>
+<th>先に疑うこと</th>
+<th>対応例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>資格情報／アクセス拒否</td>
+<td>URL・アカウント・権限</td>
+<td>サイトURLとログインを再確認</td>
+</tr>
+<tr>
+<td>ファイルが0件</td>
+<td>Name / Folder Pathの抽出条件</td>
+<td>ファイル移動・改名を確認</td>
+</tr>
+<tr>
+<td>Keyが一致しない</td>
+<td>表名／シート名の変更</td>
+<td>ナビゲーションを見直す</td>
+</tr>
+<tr>
+<td>指定した列がない</td>
+<td>列見出し変更・欠損</td>
+<td>列名・変換順を見直す</td>
+</tr>
+<tr>
+<td>不要なファイルも結合</td>
+<td>フォルダー・拡張子の条件</td>
+<td>結合前に除外</td>
+</tr>
+<tr>
+<td>更新が遅い</td>
+<td>大量ファイルを取得</td>
+<td>先にファイル・列を絞る</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="section-18" class="manual-section" aria-labelledby="heading-18">
+<h2 id="heading-18">17. 継続運用のための設計ルール</h2>
+<ul class="checklist">
+<li>元データの列名・テーブル名・型をできるだけ固定する。</li>
+<li>ファイル名規則と対象フォルダーを運用ルールにする。</li>
+<li>サイトURLとファイル抽出条件（Name／Folder Path）を記録する。</li>
+<li>集計ブックを別担当者へ渡す際は、参照権限と更新手順も渡す。</li>
+<li>変更後には、件数／合計／日付範囲／エラー件数を必ず照合する。</li>
+</ul>
+</section>
+<section id="section-19" class="manual-section" aria-labelledby="heading-19">
+<h2 id="heading-19">18. 練習課題（最短10分）</h2>
+<ol class="steps">
+<li>SharePointのテスト用フォルダーに「sales.xlsx」を置き、「Sales」というExcelテーブルを含めます。</li>
+<li>SharePoint フォルダーから接続し、NameとFolder Pathで1件に絞ります。</li>
+<li>ContentのBinaryを開き、Salesテーブルを取得します。</li>
+<li>不要列を1つ削除し、日付列の型を設定します。</li>
+<li>Excelへ読み込み、元ファイルに行を1件追加し、［すべて更新］します。</li>
+<li>件数が1増えたことを確認し、Nameフィルターの変更も試します。</li>
+</ol>
+</section>
+<section id="section-20" class="manual-section" aria-labelledby="heading-20">
+<h2 id="heading-20">付録A　画面が異なる場合の考え方</h2>
+<p>Microsoft 365のUIは順次更新されます。この資料の「ボタン名」は利用環境で完全一致しないことがあります。メニューが見つからない場合は、操作名「SharePoint フォルダー」「データソース設定」「クエリと接続」「閉じて読み込む」を検索してください。</p>
+<p>Excel for the web / Mac では接続・編集機能や対応コネクタがWindowsデスクトップ版と異なる場合があります。本書はWindowsデスクトップ版を前提にしています。</p>
+</section>
+<section id="section-21" class="manual-section" aria-labelledby="heading-21">
+<h2 id="heading-21">付録B　参考資料（Microsoft公式）</h2>
+<div class="references">
+<p><strong>S1 Teamsのファイル保存先　</strong><a href="https://support.microsoft.com/ja-jp/teams/files/file-storage-in-microsoft-teams" target="_blank" rel="noopener noreferrer">https://support.microsoft.com/ja-jp/teams/files/file-storage-in-microsoft-teams</a></p>
+<p><strong>S2 TeamsとSharePointのサイト構成　</strong><a href="https://learn.microsoft.com/ja-jp/sharepoint/teams-connected-sites" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/ja-jp/sharepoint/teams-connected-sites</a></p>
+<p><strong>S3 SharePointフォルダー接続　</strong><a href="https://learn.microsoft.com/ja-jp/power-query/connectors/sharepoint-folder" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/ja-jp/power-query/connectors/sharepoint-folder</a></p>
+<p><strong>S4 ファイルの結合　</strong><a href="https://learn.microsoft.com/ja-jp/power-query/combine-files-overview" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/ja-jp/power-query/combine-files-overview</a></p>
+<p><strong>S5 Excelでクエリを作成・編集　</strong><a href="https://support.microsoft.com/ja-jp/excel/create-load-or-edit-a-query-in-excel-power-query" target="_blank" rel="noopener noreferrer">https://support.microsoft.com/ja-jp/excel/create-load-or-edit-a-query-in-excel-power-query</a></p>
+<p><strong>S6 データソースと権限設定　</strong><a href="https://support.microsoft.com/ja-jp/excel/manage-data-source-settings-and-permissions-power-query" target="_blank" rel="noopener noreferrer">https://support.microsoft.com/ja-jp/excel/manage-data-source-settings-and-permissions-power-query</a></p>
+<p><strong>S7 Excelで外部データを更新　</strong><a href="https://support.microsoft.com/ja-jp/excel/refresh-an-external-data-connection-in-excel" target="_blank" rel="noopener noreferrer">https://support.microsoft.com/ja-jp/excel/refresh-an-external-data-connection-in-excel</a></p>
+<p><strong>S8 適用されたステップ　</strong><a href="https://learn.microsoft.com/ja-jp/power-query/applied-steps" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/ja-jp/power-query/applied-steps</a></p>
+<p><strong>S9 Power Query概要　</strong><a href="https://support.microsoft.com/ja-jp/excel/about-power-query-in-excel" target="_blank" rel="noopener noreferrer">https://support.microsoft.com/ja-jp/excel/about-power-query-in-excel</a></p>
+<p><strong>S10 TeamsからSharePointを開く　</strong><a href="https://support.microsoft.com/en-us/teams/files/collaborate-on-files-in-microsoft-teams" target="_blank" rel="noopener noreferrer">https://support.microsoft.com/en-us/teams/files/collaborate-on-files-in-microsoft-teams</a></p>
+</div>
+<aside class="note"><span class="note-tag">補足</span><p>資料中のURL、メニュー名称、接続方式は2026年11月10日時点のMicrosoft公式資料に基づくものです。</p></aside>
+</section><a class="top-link" href="#top">ページ先頭へ戻る ↑</a></main></div><footer class="footer">Power Query 操作マニュアル · 初心者向け操作資料 · 作成：2026年11月10日　|　実務で使う際は組織の権限設定とUIを確認してください。</footer>
+</body></html>
